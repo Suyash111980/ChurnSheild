@@ -1,0 +1,1 @@
+"""Dashboard summary response schemas."""

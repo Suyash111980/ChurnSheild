@@ -1,0 +1,1 @@
+"""Course-level insight endpoints."""

@@ -1,0 +1,1 @@
+"""Prediction data access boundary."""

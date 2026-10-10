@@ -1,0 +1,1 @@
+export default function RiskDistributionChart() { return <section aria-label="Risk Distribution Chart"><h2>Risk Distribution Chart</h2><p>Starter component — ready for implementation.</p></section>; }

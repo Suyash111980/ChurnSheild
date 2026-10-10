@@ -33,3 +33,5 @@ ml/reports/*
 .idea/
 .DS_Store
 Thumbs.db
+
+github_upload/
