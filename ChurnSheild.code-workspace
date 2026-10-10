@@ -1,0 +1,13 @@
+{
+  "folders": [
+    { "path": "." }
+  ],
+  "settings": {
+    "files.exclude": {
+      "github_upload": true
+    },
+    "search.exclude": {
+      "github_upload": true
+    }
+  }
+}
