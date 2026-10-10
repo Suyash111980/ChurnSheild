@@ -35,3 +35,29 @@ ml/reports/*
 Thumbs.db
 
 github_upload/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Node.js
+node_modules/
+dist/
+
+# Local datasets and generated model artifacts
+datasets/
+data/
+*.joblib
+*.pkl
+
+# Editor and OS files
+.vscode/
+.DS_Store
+Thumbs.db
