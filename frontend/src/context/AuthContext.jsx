@@ -1,13 +1,7 @@
-import { createContext, useContext, useMemo, useState } from "react";
-
-const AuthContext = createContext(null);
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const value = useMemo(() => ({ user, setUser, isAuthenticated: Boolean(user) }), [user]);
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error("useAuth must be used within AuthProvider");
-  return context;
-}
+import {createContext,useContext,useMemo,useState}from"react";
+const AuthContext=createContext(null),USERS_KEY="churnshield_demo_users",SESSION_KEY="churnshield_demo_session",PERSIST_KEY="churnshield_demo_persistent_session";
+const readUsers=()=>{try{return JSON.parse(localStorage.getItem(USERS_KEY)||"[]")}catch{return[]}};
+const readSession=()=>{try{return JSON.parse(sessionStorage.getItem(SESSION_KEY)||localStorage.getItem(PERSIST_KEY)||"null")}catch{return null}};
+async function hashPassword(password){const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(password));return [...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,"0")).join("")}
+export function AuthProvider({children}){const[user,setUser]=useState(readSession);const signup=async({name,email,password})=>{const users=readUsers(),normalized=email.toLowerCase();if(users.some(x=>x.email===normalized))throw Error("An account with this email already exists.");const account={id:crypto.randomUUID(),name,email:normalized,passwordHash:await hashPassword(password)};localStorage.setItem(USERS_KEY,JSON.stringify([...users,account]));const profile={id:account.id,name,email:account.email};sessionStorage.setItem(SESSION_KEY,JSON.stringify(profile));setUser(profile);return profile};const login=async(email,password,remember)=>{const passwordHash=await hashPassword(password),account=readUsers().find(x=>x.email===email.toLowerCase()&&x.passwordHash===passwordHash);if(!account)throw Error("Email or password is incorrect. Please try again.");const profile={id:account.id,name:account.name,email:account.email};if(remember){sessionStorage.removeItem(SESSION_KEY);localStorage.setItem(PERSIST_KEY,JSON.stringify(profile))}else{localStorage.removeItem(PERSIST_KEY);sessionStorage.setItem(SESSION_KEY,JSON.stringify(profile))}setUser(profile);return profile};const logout=()=>{sessionStorage.removeItem(SESSION_KEY);localStorage.removeItem(PERSIST_KEY);setUser(null)};const value=useMemo(()=>({user,isAuthenticated:Boolean(user),signup,login,logout}),[user]);return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>}
+export function useAuth(){const value=useContext(AuthContext);if(!value)throw Error("useAuth must be used within AuthProvider");return value}

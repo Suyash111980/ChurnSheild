@@ -1,12 +1,45 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import AppLayout from "./components/layout/AppLayout";
+import Analytics from "./pages/Analytics";
+import Dashboard from "./pages/Dashboard";
+import Learners from "./pages/Learners";
+import Login from "./pages/Login";
+import NotFound from "./pages/NotFound";
+import Settings from "./pages/Settings";
+import Signup from "./pages/Signup";
+import { CourseInsights, EarlyWarning, Recommendations, Reports, RootCause } from "./pages/WorkspacePages";
+
+function ProtectedRoute({ children }) {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
+}
+
+function GuestRoute({ children }) {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? <Navigate to="/dashboard" replace /> : children;
+}
+
 export default function App() {
-  const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1";
   return (
-    <main className="shell">
-      <div className="brand-mark" aria-hidden="true">C</div>
-      <p className="eyebrow">Learner retention intelligence</p>
-      <h1>ChurnShield</h1>
-      <p className="intro">The project foundation is ready. Dashboard workflows will connect to the ChurnShield API as the team builds each milestone.</p>
-      <a href={`${apiBase}/health`}>Check API health</a>
-    </main>
+    <AuthProvider>
+      <Routes>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
+        <Route path="/signup" element={<GuestRoute><Signup /></GuestRoute>} />
+        <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/learners" element={<Learners />} />
+          <Route path="/analytics" element={<Analytics />} />
+          <Route path="/early-warning" element={<EarlyWarning />} />
+          <Route path="/root-cause" element={<RootCause />} />
+          <Route path="/recommendations" element={<Recommendations />} />
+          <Route path="/course-insights" element={<CourseInsights />} />
+          <Route path="/reports" element={<Reports />} />
+          <Route path="/settings" element={<Settings />} />
+        </Route>
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </AuthProvider>
   );
 }
