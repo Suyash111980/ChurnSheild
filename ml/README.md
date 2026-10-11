@@ -1,6 +1,6 @@
 # ChurnShield ML: OULAD Phase 1
 
-This phase documents the Open University Learning Analytics Dataset (OULAD), checks its seven CSV tables, proposes a withdrawal target and day-30 prediction cutoff, and records a safe feature/merge plan. It does not change frontend or backend code or train a model.
+This ML area contains Phase 1 OULAD exploration and the Phase 2 reproducible, cutoff-safe learner-feature preparation pipeline. The Phase 2 pipeline prepares data for later modeling; it does not fit a model. Frontend and backend code are outside this scope.
 
 ## Data setup
 
@@ -58,3 +58,31 @@ Use one learner-course-presentation row as the analysis unit. Proposed binary ou
 Aggregate assessment and VLE events separately to the base composite key (`id_student`, `code_module`, `code_presentation`) before joining. Join assessment metadata on `id_assessment`, VLE metadata on resource/module/presentation keys, and validate one-to-many/many-to-one cardinality and row counts. Never join event-level assessment rows directly to event-level VLE rows. `date_unregistration` may expose withdrawal/future outcome, and its missingness does not imply completion. Missing assessment scores do not by themselves prove missed submissions. Review disability, age, and deprivation fields for privacy and fairness.
 
 See `reports/target_and_merge_plan.md` after running the script for dataset-derived values.
+
+## Phase 2: learner feature preparation
+
+`src/prepare_oulad.py` validates all seven CSV schemas and key columns, builds the learner-course-presentation base, aggregates assessment and VLE activity separately, attaches cutoff-safe registration features, creates the proposed target, and checks cardinality after each merge. The default output sample is **6,000 unique eligible learners** (seed 42), retaining every eligible course-presentation row for each selected learner; this may produce more than 6,000 output rows. Set `--sample-learners` to another value in the requested 5,000–7,000 range or to a value at least as large as the eligible population to include everyone.
+
+Run from the repository root:
+
+```powershell
+python -m ml.src.prepare_oulad --data-dir "D:\my files\anonymisedData" --output ml\data\processed\oulad_learner_features.csv --cutoff-day 30 --sample-learners 6000 --seed 42
+```
+
+By default, output goes to `ml/data/processed/oulad_learner_features.csv`; aggregate documentation goes to `ml/reports/phase2_preparation_report.md` and `ml/reports/phase2_feature_dictionary.csv`. Use `--report` and `--feature-dictionary` to change those paths. Processed learner data stays git-ignored. Do not place output files in the raw data directory.
+
+Install the packages in `requirements.txt` using the environment steps above. Run the synthetic tests (no real OULAD files required) from the repository root:
+
+```powershell
+python -m pytest ml\tests -q
+```
+
+### Output schema and safeguards
+
+The dataset contains one row per (`id_student`, `code_module`, `code_presentation`) and a `target_withdrawn` label. The proposal maps `Withdrawn` to 1 and `Pass`, `Fail`, and `Distinction` to 0; missing or unsupported outcomes are excluded. `final_result` is used only to construct the target and is not exported. `id_student` remains as an identifier for joins and evaluation, not a predictor.
+
+The configurable cutoff is a relative course day and is **inclusive** (`date <= cutoff`, default day 30) for VLE events, assessment submissions/due dates, and registration timing. Negative relative dates are retained in total activity and registration values when observed by the cutoff; early VLE windows start at day 0. The pipeline does not infer calendar dates. It excludes `date_unregistration` entirely. Assessment due/submission counts are built from validated `id_assessment` metadata. Banked assessment records (`is_banked=1`, observed at relative day -1 in the supplied file) are counted separately and excluded from current submission and unsubmitted-assessment counts. An assessment without a current submission record by the cutoff is not asserted to be a confirmed missed assessment. Assessment score features are omitted because the files have no mark-release timestamp to establish score availability at day 30.
+
+VLE events are checked against `vle.csv` on (`id_site`, `code_module`, `code_presentation`) and aggregated before feature merging. Exact duplicate VLE rows within the selected learners are removed because they repeat all source values; same-key rows with differing click counts are retained and summed. Counts of removed exact rows are reported. Learners with no observed VLE events receive zero activity counts, an explicit no-activity indicator, and a missing days-since-last-activity value. Each aggregate is merged one-to-one to the base and row counts are checked.
+
+Sensitive context fields (`gender`, `region`, `age_band`, `imd_band`, and `disability`) are retained for audit/analysis but need a privacy and fairness review before use in training. Missing context is preserved; imputation and encoding belong inside training folds to avoid evaluation leakage. Repeated learners must be grouped appropriately in future train/test splits. The cutoff and binary target remain provisional Phase 1 proposals pending team agreement.
