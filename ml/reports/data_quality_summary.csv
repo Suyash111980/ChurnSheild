@@ -1,0 +1,8 @@
+file,exact_duplicate_rows,candidate_key_duplicate_rows,candidate_key_null_rows,observed_quality_notes
+studentInfo.csv,0,0,0,"final_result unexpected/missing=0; additional rows beyond unique learner count=3,808 (unique learners=28,785)"
+studentAssessment.csv,0,0,0,score missing=173; score outside 0-100=0
+assessments.csv,0,0,0,date missing=11; weight total=4300.0 (inspect by course/presentation)
+studentVle.csv,787170,2195960,0,relative date range=-25..269; negative clicks=0; duplicate rows and repeated candidate keys require investigation
+studentRegistration.csv,0,0,0,registration date missing=45; unregistration date missing=22521 (not evidence of completion)
+courses.csv,0,0,0,presentation length recorded in module_presentation_length
+vle.csv,0,0,0,week_from missing=5243; week_to missing=5243

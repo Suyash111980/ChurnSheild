@@ -25,6 +25,12 @@ ml/artifacts/*
 !ml/artifacts/.gitkeep
 ml/reports/*
 !ml/reports/.gitkeep
+!ml/reports/csv_structure_summary.csv
+!ml/reports/missing_values_summary.csv
+!ml/reports/data_quality_summary.csv
+!ml/reports/join_relationships_summary.csv
+!ml/reports/feature_dictionary.csv
+!ml/reports/target_and_merge_plan.md
 *.joblib
 *.pkl
 *.parquet
