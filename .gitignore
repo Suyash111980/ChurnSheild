@@ -31,6 +31,8 @@ ml/reports/*
 !ml/reports/join_relationships_summary.csv
 !ml/reports/feature_dictionary.csv
 !ml/reports/target_and_merge_plan.md
+!ml/reports/phase2_feature_dictionary.csv
+!ml/reports/phase2_preparation_report.md
 *.joblib
 *.pkl
 *.parquet
