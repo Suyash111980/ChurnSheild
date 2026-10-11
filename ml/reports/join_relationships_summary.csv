@@ -1,0 +1,8 @@
+left_file,right_file,join_keys,unit_checked,distinct_left_keys,distinct_right_keys,unmatched_left_keys
+studentInfo.csv,courses.csv,code_module;code_presentation,unique course-presentation keys,22,22,0
+studentInfo.csv,studentRegistration.csv,id_student;code_module;code_presentation,unique learner-course-presentation keys,32593,32593,0
+studentInfo.csv,studentVle.csv,id_student;code_module;code_presentation,base learner-course-presentation keys with any VLE records,32593,29228,3365
+studentVle.csv,vle.csv,id_site;code_module;code_presentation,unique VLE resource-module-presentation keys,6268,6364,0
+assessments.csv,courses.csv,code_module;code_presentation,assessment course-presentation keys,22,22,0
+studentAssessment.csv,assessments.csv,id_assessment,unique assessment identifiers,188,206,0
+studentAssessment.csv + assessments.csv,studentInfo.csv,id_student;code_module;code_presentation,unique learner-assessment combinations mapped to course-presentation,25843,32593,0
