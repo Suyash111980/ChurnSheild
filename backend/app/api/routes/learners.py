@@ -1,6 +1,7 @@
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.api.dependencies.auth import require_roles
 from app.integrations.supabase_client import supabase
 
 router = APIRouter(prefix="/api/v1/learners", tags=["Learners"])
@@ -10,7 +11,16 @@ router = APIRouter(prefix="/api/v1/learners", tags=["Learners"])
 def get_learners(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    current_user: dict = Depends(
+        require_roles("admin", "retention_manager", "data_analyst")
+    ),
 ):
+    if supabase is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Database service is not configured.",
+        )
+
     try:
         response = (
             supabase.table("learners")

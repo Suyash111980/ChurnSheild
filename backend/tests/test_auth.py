@@ -1,0 +1,303 @@
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from uuid import uuid4
+
+import jwt
+import pytest
+from cryptography.hazmat.primitives.asymmetric import ec
+from fastapi import HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
+from fastapi.testclient import TestClient
+from jwt.exceptions import PyJWKClientConnectionError
+
+from app.api.dependencies import auth
+from app.api.routes import learners
+from app.core.config import settings
+from app.main import app
+
+ISSUER = "https://unit-test.supabase.co/auth/v1"
+SUBJECT = str(uuid4())
+
+
+class FakeJwksClient:
+    def __init__(self, public_key):
+        self.public_key = public_key
+
+    def get_signing_key_from_jwt(self, _token):
+        return SimpleNamespace(key=self.public_key)
+
+
+class FakeProfileQuery:
+    def __init__(self, rows):
+        self.rows = rows
+        self.filters = []
+
+    def table(self, table_name):
+        assert table_name == "profiles"
+        return self
+
+    def select(self, columns):
+        assert columns == "id, role"
+        return self
+
+    def eq(self, column, value):
+        self.filters.append((column, value))
+        return self
+
+    def limit(self, count):
+        assert count == 1
+        return self
+
+    def execute(self):
+        return SimpleNamespace(data=self.rows)
+
+
+class FakeLearnerQuery:
+    def table(self, table_name):
+        assert table_name == "learners"
+        return self
+
+    def select(self, columns):
+        assert columns == "*"
+        return self
+
+    def order(self, column, desc=False):
+        assert (column, desc) == ("created_at", True)
+        return self
+
+    def range(self, _first, _last):
+        return self
+
+    def execute(self):
+        return SimpleNamespace(data=[])
+
+
+@pytest.fixture
+def signing_keys():
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    return private_key, private_key.public_key()
+
+
+@pytest.fixture
+def auth_setup(monkeypatch, signing_keys):
+    private_key, public_key = signing_keys
+    monkeypatch.setattr(settings, "supabase_url", "https://unit-test.supabase.co")
+    monkeypatch.setattr(settings, "supabase_jwt_issuer", "")
+    monkeypatch.setattr(settings, "supabase_jwt_algorithm", "ES256")
+    fake_profile = FakeProfileQuery([{"id": SUBJECT, "role": "admin"}])
+    monkeypatch.setattr(auth, "supabase", fake_profile)
+    monkeypatch.setattr(auth, "_jwks_client", lambda _url: FakeJwksClient(public_key))
+    return private_key, fake_profile
+
+
+def make_token(private_key, **overrides):
+    now = datetime.now(timezone.utc)
+    claims = {
+        "sub": SUBJECT,
+        "aud": "authenticated",
+        "role": "authenticated",
+        "iss": ISSUER,
+        "iat": now,
+        "exp": now + timedelta(minutes=5),
+    }
+    claims.update(overrides)
+    return jwt.encode(
+        claims,
+        private_key,
+        algorithm="ES256",
+        headers={"kid": "test-key"},
+    )
+
+
+def credentials(token):
+    return HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+
+
+def test_valid_token_resolves_profile_role(auth_setup):
+    private_key, profile_query = auth_setup
+
+    user = auth.get_current_user(credentials(make_token(private_key)))
+
+    assert user == {
+        "id": SUBJECT,
+        "database_role": "admin",
+        "app_role": "admin",
+    }
+    assert profile_query.filters == [("id", SUBJECT)]
+
+
+def test_missing_token_is_unauthorized():
+    with pytest.raises(HTTPException) as error:
+        auth.get_current_user(None)
+
+    assert error.value.status_code == 401
+    assert error.value.headers["WWW-Authenticate"] == "Bearer"
+
+
+def test_malformed_token_is_unauthorized(auth_setup):
+    with pytest.raises(HTTPException) as error:
+        auth.get_current_user(credentials("not-a-jwt"))
+
+    assert error.value.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "claims",
+    [
+        {"exp": datetime.now(timezone.utc) - timedelta(minutes=1)},
+        {"iss": "https://wrong.example/auth/v1"},
+        {"aud": "wrong-audience"},
+        {"sub": "not-a-uuid"},
+        {"role": "service_role"},
+    ],
+)
+def test_invalid_claims_are_unauthorized(auth_setup, claims):
+    private_key, _ = auth_setup
+
+    with pytest.raises(HTTPException) as error:
+        auth.get_current_user(credentials(make_token(private_key, **claims)))
+
+    assert error.value.status_code == 401
+
+
+def test_bad_signature_is_unauthorized(auth_setup):
+    private_key, _ = auth_setup
+    wrong_key = ec.generate_private_key(ec.SECP256R1())
+
+    with pytest.raises(HTTPException) as error:
+        auth.get_current_user(credentials(make_token(wrong_key)))
+
+    assert error.value.status_code == 401
+
+
+def test_jwks_outage_is_service_unavailable(auth_setup, monkeypatch):
+    private_key, _ = auth_setup
+
+    class UnavailableJwks:
+        def get_signing_key_from_jwt(self, _token):
+            raise PyJWKClientConnectionError("provider unavailable")
+
+    monkeypatch.setattr(auth, "_jwks_client", lambda _url: UnavailableJwks())
+    with pytest.raises(HTTPException) as error:
+        auth.get_current_user(credentials(make_token(private_key)))
+
+    assert error.value.status_code == 503
+
+
+def test_jwks_outage_is_503_over_http(auth_setup, monkeypatch):
+    private_key, _ = auth_setup
+
+    class UnavailableJwks:
+        def get_signing_key_from_jwt(self, _token):
+            raise PyJWKClientConnectionError("provider unavailable")
+
+    monkeypatch.setattr(auth, "_jwks_client", lambda _url: UnavailableJwks())
+    response = TestClient(app).get(
+        "/api/v1/learners",
+        headers={"Authorization": f"Bearer {make_token(private_key)}"},
+    )
+
+    assert response.status_code == 503
+
+
+@pytest.mark.parametrize(
+    ("database_role", "app_role"),
+    [
+        ("admin", "admin"),
+        ("educator", "retention_manager"),
+        ("analyst", "data_analyst"),
+    ],
+)
+def test_database_roles_map_to_srs_roles(
+    auth_setup, monkeypatch, database_role, app_role
+):
+    private_key, profile_query = auth_setup
+    profile_query.rows = [{"id": SUBJECT, "role": database_role}]
+
+    user = auth.get_current_user(credentials(make_token(private_key)))
+
+    assert user["app_role"] == app_role
+
+
+@pytest.mark.parametrize("database_role", ["admin", "educator", "analyst"])
+def test_mapped_roles_access_learners_over_http(
+    auth_setup, monkeypatch, database_role
+):
+    private_key, profile_query = auth_setup
+    profile_query.rows = [{"id": SUBJECT, "role": database_role}]
+    monkeypatch.setattr(learners, "supabase", FakeLearnerQuery())
+
+    response = TestClient(app).get(
+        "/api/v1/learners",
+        headers={"Authorization": f"Bearer {make_token(private_key)}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == []
+
+
+def test_missing_profile_fails_closed(auth_setup, monkeypatch):
+    private_key, profile_query = auth_setup
+    profile_query.rows = []
+
+    with pytest.raises(HTTPException) as error:
+        auth.get_current_user(credentials(make_token(private_key)))
+
+    assert error.value.status_code == 403
+
+
+def test_missing_profile_is_forbidden_over_http(auth_setup):
+    private_key, profile_query = auth_setup
+    profile_query.rows = []
+
+    response = TestClient(app).get(
+        "/api/v1/learners",
+        headers={"Authorization": f"Bearer {make_token(private_key)}"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_unknown_profile_role_fails_closed(auth_setup):
+    private_key, profile_query = auth_setup
+    profile_query.rows = [{"id": SUBJECT, "role": "unexpected"}]
+
+    with pytest.raises(HTTPException) as error:
+        auth.get_current_user(credentials(make_token(private_key)))
+
+    assert error.value.status_code == 403
+
+
+def test_profile_service_outage_is_service_unavailable(auth_setup, monkeypatch):
+    private_key, _ = auth_setup
+
+    class BrokenProfileQuery:
+        def table(self, _table_name):
+            raise RuntimeError("internal database diagnostic")
+
+    monkeypatch.setattr(auth, "supabase", BrokenProfileQuery())
+    with pytest.raises(HTTPException) as error:
+        auth.get_current_user(credentials(make_token(private_key)))
+
+    assert error.value.status_code == 503
+    assert "internal database diagnostic" not in error.value.detail
+
+
+def test_role_dependency_allows_or_denies_as_configured():
+    allow_analyst = auth.require_roles("data_analyst")
+    user = {"id": SUBJECT, "database_role": "analyst", "app_role": "data_analyst"}
+
+    assert allow_analyst(current_user=user) == user
+    with pytest.raises(HTTPException) as error:
+        auth.require_roles("admin")(current_user=user)
+    assert error.value.status_code == 403
+
+
+def test_missing_supabase_configuration_is_unavailable(auth_setup, monkeypatch):
+    private_key, _ = auth_setup
+    monkeypatch.setattr(settings, "supabase_url", "")
+
+    with pytest.raises(HTTPException) as error:
+        auth.get_current_user(credentials(make_token(private_key)))
+
+    assert error.value.status_code == 503
