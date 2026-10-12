@@ -1,7 +1,9 @@
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.api.routes.learners import router as learners_router
 
 app = FastAPI(
     title="ChurnShield API",
@@ -20,6 +22,9 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+# Register API routers
+app.include_router(learners_router)
+
 
 @app.get("/", tags=["Health"])
 def root() -> dict[str, str]:
@@ -28,4 +33,8 @@ def root() -> dict[str, str]:
 
 @app.get("/api/v1/health", tags=["Health"])
 def health_check() -> dict[str, str]:
-    return {"status": "healthy", "service": "churnshield-backend", "version": app.version}
+    return {
+        "status": "healthy",
+        "service": "churnshield-backend",
+        "version": app.version,
+    }

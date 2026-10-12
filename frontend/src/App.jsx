@@ -1,3 +1,4 @@
+
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import AppLayout from "./components/layout/AppLayout";
@@ -8,15 +9,39 @@ import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import Settings from "./pages/Settings";
 import Signup from "./pages/Signup";
-import { CourseInsights, EarlyWarning, Recommendations, Reports, RootCause } from "./pages/WorkspacePages";
+import {
+  CourseInsights,
+  EarlyWarning,
+  Recommendations,
+  Reports,
+  RootCause,
+} from "./pages/WorkspacePages";
 
 function ProtectedRoute({ children }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="auth-loading" role="status">
+        Checking session...
+      </div>
+    );
+  }
+
   return isAuthenticated ? children : <Navigate to="/login" replace />;
 }
 
 function GuestRoute({ children }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="auth-loading" role="status">
+        Checking session...
+      </div>
+    );
+  }
+
   return isAuthenticated ? <Navigate to="/dashboard" replace /> : children;
 }
 
@@ -25,9 +50,32 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
-        <Route path="/signup" element={<GuestRoute><Signup /></GuestRoute>} />
-        <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+
+        <Route
+          path="/login"
+          element={
+            <GuestRoute>
+              <Login />
+            </GuestRoute>
+          }
+        />
+
+        <Route
+          path="/signup"
+          element={
+            <GuestRoute>
+              <Signup />
+            </GuestRoute>
+          }
+        />
+
+        <Route
+          element={
+            <ProtectedRoute>
+              <AppLayout />
+            </ProtectedRoute>
+          }
+        >
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/learners" element={<Learners />} />
           <Route path="/analytics" element={<Analytics />} />
@@ -38,6 +86,7 @@ export default function App() {
           <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
+
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AuthProvider>
