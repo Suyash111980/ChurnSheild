@@ -9,6 +9,8 @@ import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import Settings from "./pages/Settings";
 import Signup from "./pages/Signup";
+import AccountStatus from "./pages/AccountStatus";
+import AdminApprovals from "./pages/AdminApprovals";
 import {
   CourseInsights,
   EarlyWarning,
@@ -18,7 +20,7 @@ import {
 } from "./pages/WorkspacePages";
 
 function ProtectedRoute({ children }) {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, accountProfile, profileLoading } = useAuth();
 
   if (loading) {
     return (
@@ -26,6 +28,14 @@ function ProtectedRoute({ children }) {
         Checking session...
       </div>
     );
+  }
+
+  if (isAuthenticated && profileLoading) {
+    return <div className="auth-loading" role="status">Checking account approval...</div>;
+  }
+
+  if (isAuthenticated && accountProfile?.approval_status !== "approved") {
+    return <Navigate to="/account-status" replace />;
   }
 
   return isAuthenticated ? children : <Navigate to="/login" replace />;
@@ -69,6 +79,8 @@ export default function App() {
           }
         />
 
+        <Route path="/account-status" element={<AccountStatus />} />
+
         <Route
           element={
             <ProtectedRoute>
@@ -85,6 +97,7 @@ export default function App() {
           <Route path="/course-insights" element={<CourseInsights />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/admin/users" element={<AdminApprovals />} />
         </Route>
 
         <Route path="*" element={<NotFound />} />

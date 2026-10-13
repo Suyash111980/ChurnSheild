@@ -37,7 +37,7 @@ class FakeProfileQuery:
         return self
 
     def select(self, columns):
-        assert columns == "id, role"
+        assert columns == "id, role, approval_status"
         return self
 
     def eq(self, column, value):
@@ -84,7 +84,9 @@ def auth_setup(monkeypatch, signing_keys):
     monkeypatch.setattr(settings, "supabase_url", "https://unit-test.supabase.co")
     monkeypatch.setattr(settings, "supabase_jwt_issuer", "")
     monkeypatch.setattr(settings, "supabase_jwt_algorithm", "ES256")
-    fake_profile = FakeProfileQuery([{"id": SUBJECT, "role": "admin"}])
+    fake_profile = FakeProfileQuery(
+        [{"id": SUBJECT, "role": "admin", "approval_status": "approved"}]
+    )
     monkeypatch.setattr(auth, "supabase", fake_profile)
     monkeypatch.setattr(auth, "_jwks_client", lambda _url: FakeJwksClient(public_key))
     return private_key, fake_profile
@@ -122,6 +124,7 @@ def test_valid_token_resolves_profile_role(auth_setup):
         "id": SUBJECT,
         "database_role": "admin",
         "app_role": "admin",
+        "approval_status": "approved",
     }
     assert profile_query.filters == [("id", SUBJECT)]
 
@@ -212,7 +215,9 @@ def test_database_roles_map_to_srs_roles(
     auth_setup, monkeypatch, database_role, app_role
 ):
     private_key, profile_query = auth_setup
-    profile_query.rows = [{"id": SUBJECT, "role": database_role}]
+    profile_query.rows = [
+        {"id": SUBJECT, "role": database_role, "approval_status": "approved"}
+    ]
 
     user = auth.get_current_user(credentials(make_token(private_key)))
 
@@ -224,7 +229,9 @@ def test_mapped_roles_access_learners_over_http(
     auth_setup, monkeypatch, database_role
 ):
     private_key, profile_query = auth_setup
-    profile_query.rows = [{"id": SUBJECT, "role": database_role}]
+    profile_query.rows = [
+        {"id": SUBJECT, "role": database_role, "approval_status": "approved"}
+    ]
     monkeypatch.setattr(learners, "supabase", FakeLearnerQuery())
 
     response = TestClient(app).get(
@@ -258,9 +265,58 @@ def test_missing_profile_is_forbidden_over_http(auth_setup):
     assert response.status_code == 403
 
 
+@pytest.mark.parametrize(
+    ("approval_status", "expected_detail"),
+    [
+        ("pending", "awaiting administrator approval"),
+        ("denied", "denied access"),
+    ],
+)
+def test_pending_and_denied_profiles_are_forbidden_over_http(
+    auth_setup, approval_status, expected_detail
+):
+    private_key, profile_query = auth_setup
+    profile_query.rows = [
+        {"id": SUBJECT, "role": "educator", "approval_status": approval_status}
+    ]
+
+    response = TestClient(app).get(
+        "/api/v1/learners",
+        headers={"Authorization": f"Bearer {make_token(private_key)}"},
+    )
+
+    assert response.status_code == 403
+    assert expected_detail in response.json()["detail"]
+
+
+def test_account_status_endpoint_exposes_only_callers_approval_state(auth_setup):
+    private_key, profile_query = auth_setup
+    profile_query.rows = [
+        {"id": SUBJECT, "role": "analyst", "approval_status": "pending"}
+    ]
+
+    response = TestClient(app).get(
+        "/api/v1/auth/status",
+        headers={"Authorization": f"Bearer {make_token(private_key)}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": SUBJECT,
+        "app_role": "data_analyst",
+        "approval_status": "pending",
+    }
+
+
 def test_unknown_profile_role_fails_closed(auth_setup):
     private_key, profile_query = auth_setup
-    profile_query.rows = [{"id": SUBJECT, "role": "unexpected"}]
+    profile_query.rows = [
+        {
+            "id": SUBJECT,
+            "role": "unexpected",
+            "approval_status": "approved",
+        }
+    ]
 
     with pytest.raises(HTTPException) as error:
         auth.get_current_user(credentials(make_token(private_key)))
@@ -301,3 +357,38 @@ def test_missing_supabase_configuration_is_unavailable(auth_setup, monkeypatch):
         auth.get_current_user(credentials(make_token(private_key)))
 
     assert error.value.status_code == 503
+
+
+@pytest.mark.parametrize(
+    ("approval_status", "expected_detail"),
+    [
+        ("pending", "awaiting administrator approval"),
+        ("denied", "denied access"),
+        (None, "requires administrator review"),
+    ],
+)
+def test_unapproved_profiles_are_forbidden(auth_setup, approval_status, expected_detail):
+    private_key, profile_query = auth_setup
+    profile_query.rows = [
+        {"id": SUBJECT, "role": "educator", "approval_status": approval_status}
+    ]
+
+    with pytest.raises(HTTPException) as error:
+        auth.get_current_user(credentials(make_token(private_key)))
+
+    assert error.value.status_code == 403
+    assert expected_detail in error.value.detail
+
+
+def test_approval_status_endpoint_returns_own_unapproved_status(auth_setup):
+    private_key, profile_query = auth_setup
+    profile_query.rows = [
+        {"id": SUBJECT, "role": "educator", "approval_status": "pending"}
+    ]
+
+    profile = auth.get_authenticated_profile(credentials(make_token(private_key)))
+
+    assert profile["approval_status"] == "pending"
+    with pytest.raises(HTTPException) as error:
+        auth.get_current_user(credentials(make_token(private_key)))
+    assert error.value.status_code == 403

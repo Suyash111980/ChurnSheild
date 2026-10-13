@@ -13,7 +13,7 @@ const links = [
 ];
 
 export default function Sidebar({ open, onClose }) {
-  const { user, logout } = useAuth();
+  const { user, logout, accountProfile } = useAuth();
   const navigate = useNavigate();
   const leave = () => { logout(); navigate("/login"); };
   return <>
@@ -23,7 +23,10 @@ export default function Sidebar({ open, onClose }) {
       <div className="nav-label workspace-label">WORKSPACE</div>
       <nav className="nav-list">{links.map(([label, to, Icon, badge]) => <NavLink key={to} to={to} onClick={onClose} className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}><Icon size={18} /><span>{label}</span>{badge && <span className="nav-count">{badge}</span>}</NavLink>)}</nav>
       <div className="nav-label account-label">ACCOUNT</div>
-      <nav className="nav-list"><NavLink to="/settings" onClick={onClose} className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}><Settings size={18} /><span>Settings</span></NavLink></nav>
+      <nav className="nav-list">
+        <NavLink to="/settings" onClick={onClose} className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}><Settings size={18} /><span>Settings</span></NavLink>
+        {accountProfile?.app_role === "admin" && <NavLink to="/admin/users" onClick={onClose} className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}><ShieldCheck size={18} /><span>Account approvals</span></NavLink>}
+      </nav>
       <div className="sidebar-bottom"><div className="plan-card"><div className="plan-icon"><Sparkles size={16} /></div><div><strong>Need a clearer signal?</strong><span>Review the model guide before taking action.</span></div><a href="#guide" onClick={e => e.preventDefault()}>Open responsible AI guide <span>→</span></a></div>
         <div className="profile-row"><div className="avatar">{user?.name?.slice(0, 1).toUpperCase() || "P"}</div><div className="profile-copy"><strong>{user?.name || "Demo user"}</strong><span>{user?.email}</span></div><button className="icon-button logout" title="Log out" aria-label="Log out" onClick={leave}><LogOut size={17} /></button></div>
       </div>

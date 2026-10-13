@@ -6,12 +6,26 @@ import {
   useState,
 } from "react";
 import { supabase } from "../lib/supabase";
+import { apiRequest } from "../services/apiClient";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [accountProfile, setAccountProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+
+  async function refreshAccountProfile() {
+    setProfileLoading(true);
+    try {
+      const profile = await apiRequest("/auth/status");
+      setAccountProfile(profile);
+      return profile;
+    } finally {
+      setProfileLoading(false);
+    }
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -21,7 +35,19 @@ export function AuthProvider({ children }) {
 
       if (!mounted) return;
 
-      setUser(error ? null : data.session?.user ?? null);
+      const session = error ? null : data.session;
+      setUser(session?.user ?? null);
+      if (session) {
+        try {
+          const profile = await apiRequest("/auth/status");
+          if (mounted) setAccountProfile(profile);
+        } catch {
+          if (mounted) setAccountProfile(null);
+        }
+      } else {
+        setAccountProfile(null);
+      }
+      if (mounted) setProfileLoading(false);
       setLoading(false);
     }
 
@@ -32,6 +58,12 @@ export function AuthProvider({ children }) {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (mounted) {
         setUser(session?.user ?? null);
+        if (!session) {
+          setAccountProfile(null);
+          setProfileLoading(false);
+        } else if (_event === "SIGNED_IN") {
+          setProfileLoading(true);
+        }
         setLoading(false);
       }
     });
@@ -52,6 +84,7 @@ export function AuthProvider({ children }) {
     });
 
     if (error) throw error;
+    if (data.session) await refreshAccountProfile();
     return data;
   }
 
@@ -62,6 +95,7 @@ export function AuthProvider({ children }) {
     });
 
     if (error) throw error;
+    await refreshAccountProfile();
     return data;
   }
 
@@ -74,7 +108,9 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider
       value={{
         user,
+        accountProfile,
         loading,
+        profileLoading,
         isAuthenticated: Boolean(user),
         signup,
         login,
