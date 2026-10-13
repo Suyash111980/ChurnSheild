@@ -36,10 +36,10 @@ def _jwks_client(jwks_url: str) -> PyJWKClient:
     return PyJWKClient(jwks_url, cache_keys=True, timeout=5)
 
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+def _get_authenticated_profile(
+    credentials: HTTPAuthorizationCredentials | None,
 ) -> dict[str, Any]:
-    """Verify a Supabase access token and resolve its database-backed role."""
+    """Verify the Supabase token and load trusted profile approval and role."""
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise _http_error(
             status.HTTP_401_UNAUTHORIZED,
@@ -133,7 +133,7 @@ def get_current_user(
     try:
         response = (
             supabase.table("profiles")
-            .select("id, role")
+            .select("id, role, approval_status")
             .eq("id", subject)
             .limit(1)
             .execute()
@@ -165,7 +165,43 @@ def get_current_user(
             "The ChurnShield profile has no recognized role.",
         )
 
-    return {"id": subject, "database_role": database_role, "app_role": app_role}
+    return {
+        "id": subject,
+        "database_role": database_role,
+        "app_role": app_role,
+        "approval_status": profile.get("approval_status"),
+    }
+
+
+def get_authenticated_profile(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> dict[str, Any]:
+    """Authenticate a user and expose their trusted approval state to themselves."""
+    return _get_authenticated_profile(credentials)
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> dict[str, Any]:
+    """Require an approved profile before protected application access."""
+    profile = _get_authenticated_profile(credentials)
+    approval_status = profile["approval_status"]
+    if approval_status == "pending":
+        raise _http_error(
+            status.HTTP_403_FORBIDDEN,
+            "Your account is awaiting administrator approval.",
+        )
+    if approval_status == "denied":
+        raise _http_error(
+            status.HTTP_403_FORBIDDEN,
+            "An administrator denied access to this account.",
+        )
+    if approval_status != "approved":
+        raise _http_error(
+            status.HTTP_403_FORBIDDEN,
+            "Your account requires administrator review before access.",
+        )
+    return profile
 
 
 def require_roles(*allowed_roles: str):

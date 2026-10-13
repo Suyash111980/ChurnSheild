@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.api.routes.learners import router as learners_router
+from app.api.routes.account import router as account_router
+from app.api.routes.admin_users import router as admin_users_router
 
 app = FastAPI(
     title="ChurnShield API",
@@ -24,6 +26,8 @@ app.add_middleware(
 
 # Register API routers
 app.include_router(learners_router)
+app.include_router(account_router)
+app.include_router(admin_users_router)
 
 
 @app.get("/", tags=["Health"])
