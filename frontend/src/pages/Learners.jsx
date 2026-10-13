@@ -1,3 +1,67 @@
-import { useMemo,useState } from "react"; import { Search, SlidersHorizontal, MoreHorizontal, X, Mail, BookOpen, ChevronLeft, ChevronRight } from "lucide-react"; import PageHeader from "../components/layout/PageHeader";
-const learners=[{name:"Olivia Chen",email:"olivia.chen@example.edu",course:"Product Design",score:92,risk:"Low",status:"Active"},{name:"Ethan Brooks",email:"ethan.brooks@example.edu",course:"Data Analytics",score:38,risk:"High",status:"Active"},{name:"Sofia Patel",email:"sofia.patel@example.edu",course:"Digital Marketing",score:74,risk:"Low",status:"Active"},{name:"Noah Williams",email:"noah.williams@example.edu",course:"Product Design",score:56,risk:"Medium",status:"Active"},{name:"Ava Thompson",email:"ava.thompson@example.edu",course:"UX Research",score:29,risk:"High",status:"Inactive"},{name:"Liam Garcia",email:"liam.garcia@example.edu",course:"Data Analytics",score:68,risk:"Medium",status:"Active"},{name:"Mia Anderson",email:"mia.anderson@example.edu",course:"UX Research",score:88,risk:"Low",status:"Active"},{name:"James Wilson",email:"james.wilson@example.edu",course:"Digital Marketing",score:44,risk:"High",status:"Inactive"},{name:"Isabella Kim",email:"isabella.kim@example.edu",course:"Product Design",score:79,risk:"Low",status:"Active"},{name:"Lucas Martin",email:"lucas.martin@example.edu",course:"Data Analytics",score:61,risk:"Medium",status:"Active"},{name:"Amara Okafor",email:"amara.okafor@example.edu",course:"UX Research",score:33,risk:"High",status:"Active"},{name:"Henry Davis",email:"henry.davis@example.edu",course:"Digital Marketing",score:83,risk:"Low",status:"Inactive"}];
-export default function Learners(){const[search,setSearch]=useState("");const[risk,setRisk]=useState("All risks");const[status,setStatus]=useState("All statuses");const[page,setPage]=useState(1);const[selected,setSelected]=useState(null);const filtered=useMemo(()=>learners.filter(x=>(x.name.toLowerCase().includes(search.toLowerCase())||x.email.toLowerCase().includes(search.toLowerCase()))&&(risk==="All risks"||x.risk===risk)&&(status==="All statuses"||x.status===status)),[search,risk,status]);const pages=Math.max(1,Math.ceil(filtered.length/6));return <><PageHeader eyebrow="LEARNER SUCCESS" title="Learners" subtitle="Get a clearer view of engagement and churn risk across your learners."/><div className="table-summary"><div><strong>{filtered.length}</strong> learners <span>·</span> <span className="small-demo">Illustrative demo records</span></div><button className="secondary-button"><SlidersHorizontal size={15}/> Customize</button></div><section className="panel table-panel"><div className="table-toolbar"><div className="search-box"><Search size={17}/><input placeholder="Search learners..." value={search} onChange={e=>{setSearch(e.target.value);setPage(1)}}/><kbd>⌘ K</kbd></div><div className="filter-row"><select aria-label="Filter by risk" value={risk} onChange={e=>{setRisk(e.target.value);setPage(1)}}>{["All risks","Low","Medium","High"].map(x=><option key={x}>{x}</option>)}</select><select aria-label="Filter by status" value={status} onChange={e=>{setStatus(e.target.value);setPage(1)}}>{["All statuses","Active","Inactive"].map(x=><option key={x}>{x}</option>)}</select></div></div><div className="table-scroll"><table className="learner-table"><thead><tr><th>Learner</th><th>Course</th><th>Engagement</th><th>Churn risk</th><th>Status</th><th></th></tr></thead><tbody>{filtered.slice((page-1)*6,page*6).map((x,i)=><tr key={x.email}><td><div className="learner-cell"><span className={`learner-avatar avatar-${i%5}`}>{x.name.split(" ").map(y=>y[0]).join("")}</span><span><strong>{x.name}</strong><small>{x.email}</small></span></div></td><td><span className="course-name">{x.course}</span></td><td><div className="score-cell"><div className="score-track"><i className={x.score<45?"score-warn":""} style={{width:`${x.score}%`}}/></div><span>{x.score}</span></div></td><td><span className={`risk-badge risk-${x.risk.toLowerCase()}`}><i/>{x.risk}</span></td><td><span className={`status-badge status-${x.status.toLowerCase()}`}><i/>{x.status}</span></td><td><button className="icon-button row-more" aria-label={`View ${x.name}`} onClick={()=>setSelected(x)}><MoreHorizontal size={19}/></button></td></tr>)}</tbody></table>{filtered.length===0&&<div className="table-empty"><div>⌕</div><strong>No learners found</strong><span>Try adjusting your search or filters.</span><button className="text-button" onClick={()=>{setSearch("");setRisk("All risks");setStatus("All statuses")}}>Clear filters</button></div>}</div><div className="table-pagination"><span>Showing <strong>{filtered.length?((page-1)*6+1):0}–{Math.min(page*6,filtered.length)}</strong> of <strong>{filtered.length}</strong> learners</span><div><button className="page-button" disabled={page===1} onClick={()=>setPage(page-1)} aria-label="Previous page"><ChevronLeft size={17}/></button><button className="page-number">{page}</button>{pages>1&&<button className="page-number" onClick={()=>setPage(Math.min(pages,page+1))}>{Math.min(pages,page+1)}</button>}<button className="page-button" disabled={page>=pages} onClick={()=>setPage(page+1)} aria-label="Next page"><ChevronRight size={17}/></button></div></div></section><div className="data-footnote"><span>ⓘ</span> Sample learner records for interface preview only. No real learner data is shown.</div>{selected&&<div className="modal-scrim" onClick={()=>setSelected(null)}><section className="learner-modal" onClick={e=>e.stopPropagation()}><button className="icon-button modal-close" onClick={()=>setSelected(null)} aria-label="Close details"><X size={19}/></button><div className="modal-profile-avatar">{selected.name.split(" ").map(y=>y[0]).join("")}</div><span className="modal-demo-label">DEMO LEARNER PROFILE</span><h2>{selected.name}</h2><p className="modal-email"><Mail size={15}/>{selected.email}</p><div className="modal-detail-grid"><div><span>COURSE</span><strong><BookOpen size={15}/>{selected.course}</strong></div><div><span>ENGAGEMENT SCORE</span><strong>{selected.score}<small>/ 100</small></strong></div><div><span>CHURN RISK</span><strong><i className={`risk-dot risk-${selected.risk.toLowerCase()}`}/>{selected.risk}</strong></div><div><span>STATUS</span><strong>{selected.status}</strong></div></div><p className="modal-note">This profile uses illustrative information created for the ChurnShield interface demo.</p><button className="primary-button modal-done" onClick={()=>setSelected(null)}>Done</button></section></div>}</>}
+import { useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, ShieldAlert } from "lucide-react";
+import PageHeader from "../components/layout/PageHeader";
+import LearnerFilters from "../components/learners/LearnerFilters";
+import LearnerTable from "../components/learners/LearnerTable";
+import ErrorState from "../components/common/ErrorState";
+import EmptyState from "../components/common/EmptyState";
+import LoadingState from "../components/common/LoadingState";
+import { useLearners } from "../hooks/useLearners";
+
+const PAGE_SIZE = 20;
+const text = (value) => String(value ?? "").toLocaleLowerCase();
+
+function errorMessage(error) {
+  const status = Number(error?.message?.match(/\((\d{3})\)/)?.[1]);
+  if (status === 401) return "Your session may have expired. Sign in again to access learner records.";
+  if (status === 403) return "Your account does not have permission to view learner records.";
+  if (status >= 500) return "The learner service is having trouble. Try again in a moment.";
+  return "The learner service could not be reached. Check that the API is available and try again.";
+}
+
+export default function Learners() {
+  const [offset, setOffset] = useState(0);
+  const [search, setSearch] = useState("");
+  const [module, setModule] = useState("");
+  const [presentation, setPresentation] = useState("");
+  const [sort, setSort] = useState("id_student");
+  const [direction, setDirection] = useState("asc");
+  const { data, loading, error, retry } = useLearners({ limit: PAGE_SIZE, offset });
+
+  const modules = useMemo(() => [...new Set(data.map((item) => item.code_module).filter(Boolean))].sort(), [data]);
+  const presentations = useMemo(() => [...new Set(data.map((item) => item.code_presentation).filter(Boolean))].sort(), [data]);
+  const hasFilters = Boolean(search || module || presentation);
+  const filtered = useMemo(() => {
+    const query = text(search).trim();
+    return data
+      .filter((learner) => {
+        const matchesSearch = !query || [learner.student_name, learner.id_student, learner.id, learner.code_module, learner.code_presentation]
+          .some((value) => text(value).includes(query));
+        return matchesSearch && (!module || learner.code_module === module) && (!presentation || learner.code_presentation === presentation);
+      })
+      .sort((left, right) => {
+        const a = text(left[sort]);
+        const b = text(right[sort]);
+        return a.localeCompare(b, undefined, { numeric: true }) * (direction === "asc" ? 1 : -1);
+      });
+  }, [data, direction, module, presentation, search, sort]);
+
+  const clearFilters = () => { setSearch(""); setModule(""); setPresentation(""); };
+  const changeSort = (field) => {
+    if (sort === field) setDirection((current) => current === "asc" ? "desc" : "asc");
+    else { setSort(field); setDirection("asc"); }
+  };
+  const setPage = (nextOffset) => { clearFilters(); setOffset(Math.max(0, nextOffset)); };
+
+  return <>
+    <PageHeader eyebrow="LEARNER RECORDS" title="Learner Analytics" subtitle="Browse learner-course records returned by your ChurnShield API." />
+    <div className="illustrative-banner api-notice"><span className="banner-spark"><ShieldAlert size={16} /></span><span><strong>Backend fields available:</strong> learner identifiers, module, presentation, and demographic fields. Risk scores, risk categories, activity metrics, and display names are not currently returned by this API.</span></div>
+    <section className="panel table-panel api-table-panel">
+      <div className="api-table-heading"><div><h2>Learner records</h2><p>Search, filter, and sort the current API page. Page navigation uses backend limit and offset.</p></div><span className="api-count">{loading ? "Loading…" : `${filtered.length} shown on this page`}</span></div>
+      <LearnerFilters search={search} onSearchChange={setSearch} module={module} onModuleChange={setModule} modules={modules} presentation={presentation} onPresentationChange={setPresentation} presentations={presentations} onClear={clearFilters} hasFilters={hasFilters} />
+      {loading ? <LoadingState rows={6} label="Loading learner records" /> : error ? <ErrorState title="Learner records unavailable" message={errorMessage(error)} onRetry={retry} /> : data.length === 0 ? <EmptyState title="No learner records returned" message="The API returned an empty page. There may be no records, or this page may be beyond the available data." action={offset > 0 ? () => setPage(offset - PAGE_SIZE) : undefined} actionLabel="Previous page" /> : filtered.length === 0 ? <EmptyState title="No matching records" message="No records on this API page match your search and filters." action={clearFilters} /> : <LearnerTable learners={filtered} sort={sort} direction={direction} onSort={changeSort} />}
+      {!loading && !error && data.length > 0 && <div className="table-pagination api-pagination"><span>API records <strong>{offset + 1}–{offset + data.length}</strong> · total count is not provided by this endpoint</span><div><button className="page-button" disabled={offset === 0} onClick={() => setPage(offset - PAGE_SIZE)} aria-label="Previous API page"><ChevronLeft size={17} /></button><span className="page-number">Page {Math.floor(offset / PAGE_SIZE) + 1}</span><button className="page-button" disabled={data.length < PAGE_SIZE} onClick={() => setPage(offset + PAGE_SIZE)} aria-label="Next API page"><ChevronRight size={17} /></button></div></div>}
+    </section>
+    <p className="data-footnote"><span>ⓘ</span> Learner labels use backend display names when available; otherwise the learner ID is shown. Course context and database IDs remain separate.</p>
+  </>;
+}

@@ -1,23 +1,25 @@
 # ChurnShield Frontend
 
-The ChurnShield frontend is a responsive learner-retention analytics demo. Phase 1 runs entirely in the browser and uses illustrative learner and dashboard values. It does not connect to the backend, database, machine-learning pipeline, Firebase, or an external identity provider.
+The ChurnShield frontend is a responsive React dashboard for learner retention. It uses the existing Supabase authentication flow and the authenticated FastAPI API client. Dashboard analytics are shown only when an implemented backend response supports them; unavailable metrics are labeled instead of filled with mock values.
 
 ## Technologies
 
-- React 19 with functional components and hooks
-- Vite 8
-- Tailwind CSS 4 (Vite plugin) with project-specific responsive styles
-- React Router for client-side navigation
-- Lucide React icons
+- React with functional components and hooks
+- Vite
+- Tailwind CSS 4 and the existing responsive CSS design system
+- React Router
+- Lucide React
+- Supabase Auth for the existing sign-in/session flow
 
 ## Prerequisites
 
 - Node.js 20.19+ or 22.12+
 - npm
+- The ChurnShield FastAPI service and configured Supabase project for authenticated API access
 
 ## Install and run
 
-From the repository's `frontend` directory:
+Run these commands from the frontend directory:
 
 ```powershell
 cd "D:\AI INNOVATION\ChurnSheild\frontend"
@@ -25,48 +27,65 @@ npm install
 npm run dev
 ```
 
-To create and preview the production build:
+The frontend reads configuration from Vite environment variables. Copy `.env.example` to `.env.local` and set the API base URL, Supabase project URL, and Supabase publishable/anon key. Do not put service-role keys or private credentials in frontend environment variables.
+
+```env
+VITE_API_BASE_URL=http://localhost:8000/api/v1
+VITE_SUPABASE_URL=
+VITE_SUPABASE_PUBLISHABLE_KEY=
+```
+
+Create and preview a production build from the same directory:
 
 ```powershell
 npm run build
 npm run preview
 ```
 
-## Demo authentication
+## Authentication
 
-Open `/signup` to create a demo account using a name, email, and password of your choice. Passwords must be at least 8 characters, and confirmation and the demo-terms checkbox are required. The account is created locally in this browser; a SHA-256 password hash is stored in local storage, never the password. The active session profile is kept in session storage. The login page validates the email and credentials, and its “Remember me” option keeps only the session profile in local storage. Logging out clears the session and returns to `/login`.
-
-This is a browser-only demonstration, not production authentication. Do not use a real password or sensitive personal information. Browser storage is not a secure credential store, and clearing site data removes demo accounts. There is no password reset in Phase 1.
+Login and signup continue to use the existing Supabase Auth integration. The API client attaches the current Supabase access token and attempts the existing session refresh flow after an unauthorized response. Protected dashboard routes require an authenticated session and an approved account. This frontend does not implement a parallel demo-auth system or bypass backend authorization.
 
 ## Routes
 
 | Route | Purpose | Access |
 | --- | --- | --- |
-| `/login` | Demo account sign-in | Public |
-| `/signup` | Create a browser-local demo account | Public |
-| `/dashboard` | Illustrative retention metrics and trends | Protected |
-| `/learners` | Searchable, filterable sample learner table | Protected |
-| `/analytics` | Sample course and engagement analytics | Protected |
-| `/settings` | Dataset, safeguards, notifications, and account | Protected |
-| `/early-warning` | Risk review queue | Protected |
-| `/root-cause` | Illustrative risk explanation | Protected |
-| `/recommendations` | Human-reviewed action queue | Protected |
-| `/course-insights` | Course and cohort insights | Protected |
-| `/reports` | Exportable demo summaries | Protected |
+| `/login` | Sign in with the configured Supabase project | Public/guest |
+| `/signup` | Create an account through the existing Supabase flow | Public/guest |
+| `/dashboard` | Dashboard metrics availability and API status | Protected |
+| `/learners` | Authenticated, paginated learner records | Protected |
+| `/learners/:learnerId` | Learner detail by database UUID; requires a detail API route | Protected |
+| `/analytics` | Existing analytics page | Protected |
+| `/early-warning` | Existing early-warning workspace | Protected |
+| `/root-cause` | Existing root-cause workspace | Protected |
+| `/recommendations` | Existing recommendations workspace | Protected |
+| `/course-insights` | Existing course insights | Protected |
+| `/reports` | Existing reports workspace | Protected |
+| `/settings` | Account and application settings | Protected |
+| `/account-status` | Approval status | Authenticated |
 
-Unauthenticated dashboard visits redirect to `/login`; authenticated visits to login or signup redirect to `/dashboard`. Unknown routes show a not-found page.
+## Current backend integration contract
+
+- `GET /api/v1/learners?limit=<1..100>&offset=<n>` is implemented. It returns a `data` array and page metadata. The current contract does not provide a total count, search/filter/sort parameters, risk predictions, activity/performance signals, or `student_name`.
+- The learner page uses backend `limit`/`offset` pagination. Search, module/presentation filters, and sorting operate on the currently fetched page only.
+- When the backend includes `student_name` in a learner record, it is display-only. Otherwise the UI uses `Learner <id_student>` and keeps the database UUID, learner ID, module, and presentation distinct.
+- `GET /api/v1/learners/{id}` is not currently implemented. The profile route reports this dependency and uses the database UUID as its route identifier; it does not substitute fabricated profile information.
+- A dashboard summary/statistics endpoint is not currently implemented. The dashboard therefore shows no fabricated totals, risk distributions, retention rates, or trends.
+- Phase 1 and Phase 2 screens outside the API-backed learner and dashboard work remain in place. Backend, database, and ML integration changes are not part of this frontend branch.
 
 ## Source layout
 
 ```text
 src/
-  components/layout/   Shared sidebar, topbar, page header, and app shell
-  context/             Browser-only demo authentication state
-  pages/               Login, signup, dashboard, learners, analytics, settings
-  index.css            Tailwind entry and responsive design system
-  App.jsx               Route definitions and route guards
+  components/common/   Shared loading, error, and empty states
+  components/layout/   Sidebar, topbar, page header, and app shell
+  components/learners/ Learner filters, table, and risk badge
+  context/             Existing Supabase authentication state
+  hooks/               Dashboard and learner data hooks
+  pages/               Auth, dashboard, learner, and workspace pages
+  services/            Centralized API and feature service modules
+  App.jsx               Routes and protected-route guards
   main.jsx              React and browser-router entry point
 ```
 
-The learner and dashboard values are fictional interface fixtures and are labeled as illustrative. Phase 1 does not include backend integration.
-
+Install dependencies, start the backend and Supabase configuration, then run `npm run dev` from `frontend/`. Phase 3/4 displays live learner fields only where the current backend contract provides them; risk predictions, learner detail profiles, and dashboard aggregates remain dependent on backend endpoints and fields that are not yet implemented.

@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { Activity, BarChart3, BookOpen, ChartNoAxesCombined, FileText, GitBranch, LayoutDashboard, LogOut, Settings, ShieldAlert, ShieldCheck, Sparkles, UsersRound, X } from "lucide-react";
+import { BookOpen, ChartNoAxesCombined, FileText, GitBranch, LayoutDashboard, LoaderCircle, LogOut, Settings, ShieldAlert, ShieldCheck, Sparkles, UsersRound, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
 const links = [
@@ -15,7 +16,22 @@ const links = [
 export default function Sidebar({ open, onClose }) {
   const { user, logout, accountProfile } = useAuth();
   const navigate = useNavigate();
-  const leave = () => { logout(); navigate("/login"); };
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+
+  const leave = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    setLogoutError("");
+    try {
+      await logout();
+      navigate("/login", { replace: true });
+    } catch {
+      setLogoutError("Could not sign out. Please try again.");
+    } finally {
+      setLoggingOut(false);
+    }
+  };
   return <>
     <button className={`drawer-scrim ${open ? "visible" : ""}`} onClick={onClose} aria-label="Close navigation" />
     <aside className={`sidebar ${open ? "drawer-open" : ""}`}>
@@ -28,7 +44,8 @@ export default function Sidebar({ open, onClose }) {
         {accountProfile?.app_role === "admin" && <NavLink to="/admin/users" onClick={onClose} className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}><ShieldCheck size={18} /><span>Account approvals</span></NavLink>}
       </nav>
       <div className="sidebar-bottom"><div className="plan-card"><div className="plan-icon"><Sparkles size={16} /></div><div><strong>Need a clearer signal?</strong><span>Review the model guide before taking action.</span></div><a href="#guide" onClick={e => e.preventDefault()}>Open responsible AI guide <span>→</span></a></div>
-        <div className="profile-row"><div className="avatar">{user?.name?.slice(0, 1).toUpperCase() || "P"}</div><div className="profile-copy"><strong>{user?.name || "Demo user"}</strong><span>{user?.email}</span></div><button className="icon-button logout" title="Log out" aria-label="Log out" onClick={leave}><LogOut size={17} /></button></div>
+        {logoutError && <p className="sidebar-logout-error" role="alert">{logoutError}</p>}
+        <div className="profile-row"><div className="avatar">{user?.name?.slice(0, 1).toUpperCase() || "P"}</div><div className="profile-copy"><strong>{user?.name || "Account"}</strong><span>{user?.email}</span></div><button className="icon-button logout" title={loggingOut ? "Signing out" : "Log out"} aria-label={loggingOut ? "Signing out" : "Log out"} aria-busy={loggingOut} disabled={loggingOut} onClick={leave}>{loggingOut ? <LoaderCircle className="logout-spinner" size={17} /> : <LogOut size={17} />}</button></div>
       </div>
     </aside>
   </>;
