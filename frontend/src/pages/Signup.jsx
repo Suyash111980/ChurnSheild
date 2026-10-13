@@ -27,10 +27,11 @@ export default function Signup() {
   const { signup } = useAuth();
 
   const update = (key) => (e) =>
-    setForm((current) => ({ ...current, [key]: e.target.value }));
+    { setError(""); setForm((current) => ({ ...current, [key]: e.target.value })); };
 
   const submit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setError("");
     setMessage("");
 
@@ -159,7 +160,7 @@ export default function Signup() {
             </div>
           </div>
 
-          <form onSubmit={submit} noValidate>
+          <form onSubmit={submit} noValidate aria-busy={loading}>
             <label className="field-label" htmlFor="name">
               Full name
             </label>
@@ -169,6 +170,8 @@ export default function Signup() {
               placeholder="Alex Morgan"
               autoComplete="name"
               value={form.name}
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? "signup-error" : undefined}
               onChange={update("name")}
             />
 
@@ -182,6 +185,8 @@ export default function Signup() {
               placeholder="you@company.com"
               autoComplete="email"
               value={form.email}
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? "signup-error" : undefined}
               onChange={update("email")}
             />
 
@@ -196,12 +201,15 @@ export default function Signup() {
                 placeholder="At least 8 characters"
                 autoComplete="new-password"
                 value={form.password}
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? "signup-error" : undefined}
                 onChange={update("password")}
               />
               <button
                 type="button"
                 className="password-toggle"
                 aria-label={show ? "Hide password" : "Show password"}
+                title={show ? "Hide password" : "Show password"}
                 onClick={() => setShow(!show)}
               >
                 {show ? <EyeOff size={17} /> : <Eye size={17} />}
@@ -219,6 +227,8 @@ export default function Signup() {
                 placeholder="Re-enter your password"
                 autoComplete="new-password"
                 value={form.confirm}
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? "signup-error" : undefined}
                 onChange={update("confirm")}
               />
             </div>
@@ -234,7 +244,7 @@ export default function Signup() {
             </label>
 
             {error && (
-              <div className="form-error" role="alert">
+              <div id="signup-error" className="form-error" role="alert">
                 {error}
               </div>
             )}

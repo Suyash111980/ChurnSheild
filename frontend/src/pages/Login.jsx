@@ -22,8 +22,20 @@ export default function Login() {
   const nav = useNavigate();
   const { login } = useAuth();
 
+  const describeAuthError = (authError) => {
+    const reason = String(authError?.message || "").toLowerCase();
+    if (reason.includes("invalid login credentials") || reason.includes("invalid credentials")) {
+      return "Email or password is incorrect. Check your details and try again.";
+    }
+    if (reason.includes("fetch") || reason.includes("network") || reason.includes("timeout")) {
+      return "We couldn’t reach the authentication service. Check your connection and try again.";
+    }
+    return "We couldn’t sign you in. Check your details and try again.";
+  };
+
   const submit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setError("");
     setMessage("");
 
@@ -43,13 +55,14 @@ export default function Login() {
       await login(email.trim(), password);
       nav("/dashboard", { replace: true });
     } catch (err) {
-      setError(err.message || "Unable to sign in. Please try again.");
+      setError(describeAuthError(err));
     } finally {
       setLoading(false);
     }
   };
 
   const resetPassword = async () => {
+    if (loading) return;
     setError("");
     setMessage("");
 
@@ -155,7 +168,7 @@ export default function Login() {
             </div>
           </div>
 
-          <form onSubmit={submit} noValidate>
+          <form onSubmit={submit} noValidate aria-busy={loading}>
             <label className="field-label" htmlFor="email">
               Email address
             </label>
@@ -166,7 +179,9 @@ export default function Login() {
               placeholder="you@company.com"
               autoComplete="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? "login-error" : undefined}
+              onChange={(e) => { setEmail(e.target.value); setError(""); }}
             />
 
             <div className="password-label">
@@ -191,7 +206,9 @@ export default function Login() {
                 placeholder="Enter your password"
                 autoComplete="current-password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? "login-error" : undefined}
+                onChange={(e) => { setPassword(e.target.value); setError(""); }}
               />
               <button
                 type="button"
@@ -204,13 +221,13 @@ export default function Login() {
             </div>
 
             {error && (
-              <div className="form-error" role="alert">
+              <div id="login-error" className="form-error" role="alert">
                 {error}
               </div>
             )}
 
             {message && (
-              <div role="status" className="form-success">
+              <div id="login-success" role="status" className="form-success">
                 {message}
               </div>
             )}

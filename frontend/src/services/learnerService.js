@@ -1,3 +1,9 @@
 import { apiRequest } from "./apiClient";
-export const getLearners = (params = {}) => apiRequest(`/learners?${new URLSearchParams(params)}`);
-export const getLearner = (learnerId) => apiRequest(`/learners/${encodeURIComponent(learnerId)}`);
+
+export const getLearners = (params = {}, options = {}) => {
+  const query = new URLSearchParams(params);
+  return apiRequest(`/learners?${query}`, options);
+};
+
+export const getLearner = (learnerId, options = {}) =>
+  apiRequest(`/learners/${encodeURIComponent(learnerId)}`, options);

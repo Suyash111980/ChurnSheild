@@ -5,6 +5,7 @@ import AppLayout from "./components/layout/AppLayout";
 import Analytics from "./pages/Analytics";
 import Dashboard from "./pages/Dashboard";
 import Learners from "./pages/Learners";
+import LearnerProfile from "./pages/LearnerProfile";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import Settings from "./pages/Settings";
@@ -90,6 +91,7 @@ export default function App() {
         >
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/learners" element={<Learners />} />
+          <Route path="/learners/:learnerId" element={<LearnerProfile />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/early-warning" element={<EarlyWarning />} />
           <Route path="/root-cause" element={<RootCause />} />

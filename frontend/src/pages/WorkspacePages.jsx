@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, Download, Eye, FileSpreadsheet, FileText, Filter, Lightbulb, Search, Sparkles, UsersRound } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 
@@ -22,9 +22,130 @@ export function EarlyWarning() {
   return <><PageHeader eyebrow="INTERVENTION WORKSPACE" title="Early Warning Center" subtitle="Prioritize learner outreach using transparent, reviewable warning signals."/><div className="page-heading-actions"><button className="secondary-button" onClick={() => downloadCsv("churnshield-demo-warning-queue.csv", [["Learner ID","Course","Risk","Warning signal","Last activity","Suggested action"], ...rows])}><Download size={15}/> Export queue</button><a className="primary-button" href="/recommendations"><Sparkles size={15}/> View recommendations</a></div>{notice}<section className="metrics-grid warning-kpis"><Kpi Icon={AlertTriangle} tone="amber" value="1,248" label="High-risk priority" sub="Needs review"/><Kpi Icon={ArrowDownRight} tone="violet" value="436" label="Inactive 7+ days" sub="35% of priority"/><Kpi Icon={ArrowDownRight} tone="amber" value="518" label="Declining engagement" sub="41% of priority"/><Kpi Icon={FileText} tone="green" value="294" label="Missing assessment" sub="24% of priority"/></section><section className="panel warning-panel"><div className="queue-heading"><div><span className="priority-tag"><i/> PRIORITY QUEUE</span><h2>High-risk learner records</h2><p>Review signals before deciding whether an intervention is appropriate.</p></div><div className="review-progress"><span>124 reviewed today</span><i><b/></i><small>61% daily review goal</small></div></div><div className="table-toolbar"><div className="search-box"><Search size={16}/><input aria-label="Search learner or signal" placeholder="Search learner ID or signal..." value={query} onChange={e=>setQuery(e.target.value)}/></div><div className="filter-row"><select aria-label="Filter risk level" value={risk} onChange={e=>setRisk(e.target.value)}>{["All risk levels","High","Medium","Low"].map(x=><option key={x}>{x}</option>)}</select><select aria-label="Filter course"><option>All courses</option>{["AAA","BBB","CCC","DDD","FFF","GGG"].map(x=><option key={x}>{x}</option>)}</select><button className="secondary-button"><Filter size={14}/> More filters</button></div></div><p className="table-caption">{rows.length} illustrative records shown <span>Sorted by risk score</span></p><div className="table-scroll"><table className="learner-table"><thead><tr><th>LEARNER ID</th><th>COURSE</th><th>RISK LEVEL</th><th>WARNING SIGNAL</th><th>LAST ACTIVITY</th><th>SUGGESTED ACTION</th><th>REVIEW</th></tr></thead><tbody>{rows.map(row=><tr key={row[0]}><td><strong className="record-link">{row[0]}</strong></td><td>{row[1]}</td><td><Risk value={row[2]}/></td><td>{row[3]}</td><td>{row[4]}</td><td>{row[5]}</td><td><button className="icon-button row-more" aria-label={`Review ${row[0]}`} onClick={()=>setReviewed([...reviewed,row[0]])}>{reviewed.includes(row[0])?<span className="reviewed-label">Done</span>:<Eye size={17}/>}</button></td></tr>)}</tbody></table>{rows.length===0&&<div className="table-empty"><strong>No matching records</strong><span>Adjust your search or risk filter.</span></div>}</div></section></>;
 }
 
+const rootCauseFeatures = [
+  { name: "Days since last activity", value: 0.31, tone: "red", direction: "pushes score higher" },
+  { name: "Missing assessments", value: 0.25, tone: "red", direction: "pushes score higher" },
+  { name: "7-day VLE clicks", value: 0.18, tone: "red", direction: "pushes score higher" },
+  { name: "Previous assessment score", value: 0.12, tone: "red", direction: "pushes score higher" },
+  { name: "Early engagement", value: 0.08, tone: "teal", direction: "pushes score lower" },
+];
+
+function animatedProgress(elapsed, index) {
+  const local = Math.max(0, Math.min(1, (elapsed - index * 105) / 800));
+  return 1 - Math.pow(1 - local, 3);
+}
+
+function AnimatedFeatureGraph({ animationKey }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion) {
+      setElapsed(1300);
+      return undefined;
+    }
+
+    let frame;
+    const startedAt = performance.now();
+    const tick = (now) => {
+      const next = Math.min(now - startedAt, 1300);
+      setElapsed(next);
+      if (next < 1300) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [animationKey]);
+
+  return <div className="feature-bars" aria-label="Illustrative feature contributions">
+    {rootCauseFeatures.map((feature, index) => {
+      const progress = animatedProgress(elapsed, index);
+      const exactValue = (feature.value * progress).toFixed(2);
+      const tooltipId = `feature-tip-${index}`;
+      return <div className="feature-row" key={feature.name} tabIndex={0} aria-describedby={tooltipId} aria-label={`${feature.name}: ${feature.value.toFixed(2)}, ${feature.direction}`}>
+        <span>{feature.name}</span>
+        <i className="feature-track"><b className={feature.tone} style={{ width: `${feature.value * progress * 100 / 0.4}%` }}/></i>
+        <strong>{exactValue}</strong>
+        <span className="feature-tooltip" role="tooltip" id={tooltipId}>{feature.name} · {feature.value.toFixed(2)} · {feature.direction}</span>
+      </div>;
+    })}
+  </div>;
+}
+
+function AnimatedRiskScore({ animationKey, value = 84 }) {
+  const [displayValue, setDisplayValue] = useState(0);
+  useEffect(() => {
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion) {
+      setDisplayValue(value);
+      return undefined;
+    }
+    let frame;
+    const startedAt = performance.now();
+    const tick = (now) => {
+      const progress = Math.min((now - startedAt) / 850, 1);
+      setDisplayValue(Math.round(value * (1 - Math.pow(1 - progress, 3))));
+      if (progress < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [animationKey, value]);
+  return <strong className="risk-score" aria-label={`Illustrative risk score ${value}`}>{displayValue}</strong>;
+}
+
 export function RootCause() {
-  const [analyzed, setAnalyzed] = useState(false); const [learner, setLearner] = useState("LNR-7429 · AAA · 2014J");
-  return <><PageHeader eyebrow="EXPLAINABLE ANALYSIS" title="Root Cause Analysis" subtitle="Review the factors associated with a learner’s illustrative risk score."/>{notice}<section className="panel analysis-controls"><label>Learner record<select value={learner} onChange={e=>{setLearner(e.target.value);setAnalyzed(false)}}><option>LNR-7429 · AAA · 2014J</option><option>LNR-3158 · DDD · 2014J</option><option>LNR-6214 · CCC · 2014B</option></select></label><label>Model snapshot<select><option>Demo model · v1.4</option></select></label><button className="primary-button" onClick={()=>setAnalyzed(true)}><Sparkles size={15}/> Analyze</button></section>{analyzed&&<div className="analysis-result-note">Illustrative explanation loaded for <strong>{learner.split(" · ")[0]}</strong>.</div>}<section className="analysis-grid"><article className="panel score-card"><div className="panel-heading"><h2>Risk summary</h2><Risk value="High"/></div><strong className="risk-score">84</strong><span className="score-caption">Illustrative risk score</span><div className="score-details"><div><span>Course</span><strong>AAA · 2014J</strong></div><div><span>Top signal</span><strong>Recent inactivity</strong></div><div><span>Confidence</span><strong>Requires human review</strong></div></div></article><article className="panel feature-card"><div className="panel-heading"><div><h2>Feature importance</h2><p>Illustrative SHAP contributions to this model output</p></div></div><div className="feature-bars">{[["Days since last activity",.31,"red"],["Missing assessments",.25,"red"],["7-day VLE clicks",.18,"red"],["Previous assessment score",.12,"red"],["Early engagement",.08,"teal"]].map(([name,val,color])=><div className="feature-row" key={name}><span>{name}</span><i><b className={color} style={{width:`${val*100/0.4}%`}}/></i><strong>{val.toFixed(2)}</strong></div>)}</div><p className="feature-legend">Red: pushes score higher <span>Teal: pushes score lower</span></p></article></section><section className="panel insight-panel"><h2>Model insight</h2><div className="insight-callout"><Sparkles size={16}/>This record’s score is most strongly associated with a long inactivity period and an unsubmitted assessment. Earlier engagement acts as a small counter-signal.</div><h3>Interpret with care</h3><p>Use these signals to guide a conversation, not automate a decision. Context such as accessibility needs or approved breaks may not be represented. Review recent notes before taking action.</p></section></>;
+  const [analyzed, setAnalyzed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [learner, setLearner] = useState("LNR-7429 · AAA · 2014J");
+  const [animationKey, setAnimationKey] = useState(1);
+
+  const runIllustrativeAnalysis = () => {
+    if (loading) return;
+    setLoading(true);
+    setAnalyzed(false);
+    // This page has no analysis API yet; prepare the existing illustrative snapshot locally.
+    window.setTimeout(() => {
+      setAnalyzed(true);
+      setAnimationKey((key) => key + 1);
+      setLoading(false);
+    }, 320);
+  };
+
+  return <>
+    <PageHeader eyebrow="EXPLAINABLE ANALYSIS" title="Root Cause Analysis" subtitle="Review the factors associated with a learner’s illustrative risk score."/>
+    {notice}
+    <section className="panel analysis-controls">
+      <label>Learner record<select value={learner} disabled={loading} onChange={(event) => { setLearner(event.target.value); setAnalyzed(false); }}>
+        <option>LNR-7429 · AAA · 2014J</option><option>LNR-3158 · DDD · 2014J</option><option>LNR-6214 · CCC · 2014B</option>
+      </select></label>
+      <label>Model snapshot<select disabled={loading}><option>Demo model · v1.4</option></select></label>
+      <button className="primary-button" onClick={runIllustrativeAnalysis} disabled={loading} aria-busy={loading}>
+        {loading ? <><span className="analysis-spinner" aria-hidden="true"/> Preparing demo</> : <><Sparkles size={15}/> Analyze</>}
+      </button>
+    </section>
+    {analyzed && <div className="analysis-result-note" role="status">Illustrative explanation ready for <strong>{learner.split(" · ")[0]}</strong>. This demo snapshot is not a live prediction.</div>}
+    <section className="analysis-grid">
+      <article className="panel score-card">
+        <div className="panel-heading"><h2>Risk summary</h2><Risk value="High"/></div>
+        <AnimatedRiskScore key={`score-${animationKey}`} animationKey={animationKey}/>
+        <span className="score-caption">Illustrative risk score</span>
+        <div className="score-details">
+          <div><span>Course</span><strong>AAA · 2014J</strong></div>
+          <div><span>Top signal</span><strong>Recent inactivity</strong></div>
+          <div><span>Confidence</span><strong>Requires human review</strong></div>
+        </div>
+      </article>
+      <article className="panel feature-card">
+        <div className="panel-heading"><div><h2>Feature importance</h2><p>Illustrative SHAP contributions to this model output</p></div></div>
+        <AnimatedFeatureGraph key={`features-${animationKey}`} animationKey={animationKey}/>
+        <p className="feature-legend">Red: pushes score higher <span>Teal: pushes score lower</span></p>
+      </article>
+    </section>
+    <section className="panel insight-panel">
+      <h2>Model insight</h2>
+      <div className="insight-callout"><Sparkles size={16}/>This record’s score is most strongly associated with a long inactivity period and an unsubmitted assessment. Earlier engagement acts as a small counter-signal.</div>
+      <h3>Interpret with care</h3><p>Use these signals to guide a conversation, not automate a decision. Context such as accessibility needs or approved breaks may not be represented. Review recent notes before taking action.</p>
+    </section>
+  </>;
 }
 
 const actions = [["Personal advisor check-in","LNR-7429 · 12 days inactive · assessment missing","High","Suggested"],["Offer assessment support","LNR-3158 · Average score 42% · declining activity","High","Reviewed"],["Send study-plan prompt","LNR-4571 · Weekly activity declining","Medium","Action Taken"],["Monitor forum engagement","LNR-6214 · Low participation · active recently","Low","Monitoring"],["Close intervention","LNR-1963 · Activity and scores recovered","Low","Resolved"]];

@@ -1,19 +1,32 @@
-import { Activity, ArrowDownRight, ArrowUpRight, Download, HeartHandshake, MoreHorizontal, ShieldAlert, UserCheck, UsersRound } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, HeartHandshake, UsersRound } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-const metrics = [["Total learners", "32,593", "Across 22 presentations", "+4.8%", UsersRound, "purple"], ["Active learners", "17,926", "55% of current records", "+2.4%", UserCheck, "red"], ["At-risk learners", "5,867", "18% of current records", "−1.2%", ShieldAlert, "amber"], ["Retention rate", "72.6%", "vs. prior presentation", "+2.1 pts", HeartHandshake, "green"]];
-const outcomes = [["2013B", 49, 18, 33], ["2013J", 53, 19, 28], ["2014B", 55, 20, 25], ["2014J", 57, 20, 23]];
+const metricCards = [
+  ["Learner records", UsersRound],
+  ["Risk distribution", AlertTriangle],
+  ["Engagement trends", Activity],
+  ["Retention rate", HeartHandshake],
+];
 
 export default function Dashboard() {
   const { user } = useAuth();
   const name = user?.name?.split(" ")[0] || "there";
+
   return <>
-    <div className="page-heading dashboard-title"><div><div className="overline">MONDAY, OCTOBER 12 <span className="heading-dot"/></div><h1>Good morning, {name}</h1><p>Here’s what needs your attention across your learning portfolio.</p></div><div className="heading-actions"><button className="secondary-button" onClick={()=>window.print()}><Download size={15}/> Export overview</button><Link to="/early-warning" className="primary-button"><ShieldAlert size={15}/> Review high-risk</Link></div></div>
-    <div className="illustrative-banner"><span className="banner-spark">ⓘ</span><span><strong>Illustrative demo data</strong> based on the OULAD schema. Values shown are not live predictions or real learner records.</span></div>
-    <section className="metrics-grid">{metrics.map(([label,value,desc,trend,Icon,color])=><article className="metric-card" key={label}><div className="metric-top"><span className={`metric-icon ${color}`}><Icon size={19}/></span><span className="metric-orbit"/></div><p className="metric-label">{label}</p><div className="metric-value">{value}</div><div className="metric-footer"><span className={`trend ${trend.startsWith("−")?"trend-negative":""}`}>{trend.startsWith("−")?<ArrowDownRight size={13}/>:<ArrowUpRight size={13}/>} {trend}</span><span>{desc}</span></div></article>)}</section>
-    <section className="dashboard-grid reference-dashboard-grid"><article className="panel risk-panel"><div className="panel-heading"><div><h2>Risk distribution</h2><p>Current illustrative learner-course records</p></div><Link className="inline-link" to="/analytics">View analytics <span>→</span></Link></div><div className="risk-breakdown"><div className="donut-wrap"><div className="donut"><div className="donut-center"><strong>32,593</strong><span>Total records</span></div></div></div><div className="risk-legend"><div><span><i className="risk-high"/>High risk</span><strong>5,867 <small>18%</small></strong></div><div><span><i className="risk-medium"/>Medium risk</span><strong>8,800 <small>27%</small></strong></div><div><span><i className="risk-low"/>Low risk</span><strong>17,926 <small>55%</small></strong></div></div></div></article>
-      <article className="panel outcomes-panel"><div className="panel-heading"><div><h2>Historical outcomes</h2><p>OULAD outcome distribution by presentation</p></div><select aria-label="Filter presentation"><option>All presentations</option><option>2013J</option><option>2014B</option><option>2014J</option></select></div><div className="outcome-chart"><div className="outcome-axis"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0</span></div><div className="outcome-plot"><div className="outcome-gridlines"><i/><i/><i/><i/><i/></div>{outcomes.map(([label,pass,distinction,withdrawn])=><div className="outcome-column" key={label}><div className="stacked-bar"><i className="pass" style={{height:`${pass}%`}}/><i className="distinction" style={{height:`${distinction}%`}}/><i className="withdrawn" style={{height:`${withdrawn}%`}}/></div><span>{label}</span></div>)}</div></div><div className="outcome-legend"><span><i className="pass"/>Pass</span><span><i className="distinction"/>Distinction</span><span><i className="withdrawn"/>Withdrawn</span></div></article></section>
-    <section className="panel attention-panel"><div className="panel-heading"><div><h2>Needs your attention</h2><p>Suggested priorities based on illustrative signals</p></div><Link className="inline-link" to="/early-warning">Open warning center <span>→</span></Link></div><div className="attention-row"><span className="attention-icon red"><ShieldAlert size={17}/></span><div><strong>1,248 learners need a high-risk review</strong><small>Across multiple courses and presentations</small></div><Link to="/early-warning">Review <span>→</span></Link></div><div className="attention-row"><span className="attention-icon teal"><Activity size={17}/></span><div><strong>Engagement is declining in 3 courses</strong><small>Compared with the previous presentation</small></div><Link to="/course-insights">Explore <span>→</span></Link></div></section>
+    <div className="page-heading dashboard-title">
+      <div><div className="overline">CHURNSHIELD OVERVIEW</div><h1>Welcome, {name}</h1><p>Live portfolio insights will appear here when the analytics API is available.</p></div>
+      <div className="heading-actions"><Link to="/learners" className="primary-button">Browse learner records <ArrowRight size={15} /></Link></div>
+    </div>
+    <div className="illustrative-banner api-notice"><span className="banner-spark"><AlertTriangle size={16} /></span><span><strong>Dashboard analytics are unavailable.</strong> The backend does not currently implement a dashboard summary or prediction endpoint. No placeholder statistics are shown as live data.</span></div>
+    <section className="metrics-grid unavailable-metrics" aria-label="Dashboard metrics unavailable">
+      {metricCards.map(([label, Icon]) => <article className="metric-card unavailable-metric" key={label}>
+        <span className="metric-icon violet"><Icon size={19} /></span><p className="metric-label">{label}</p><strong className="unavailable-value">Not available</strong><span className="unavailable-caption">No supporting API response</span>
+      </article>)}
+    </section>
+    <section className="panel dashboard-api-panel">
+      <div className="panel-heading"><div><h2>Available learner data</h2><p>The current learner endpoint provides paginated enrollment and demographic records.</p></div><Link className="inline-link" to="/learners">Open learner records <span>→</span></Link></div>
+      <div className="dashboard-api-note"><span><UsersRound size={18} /></span><p>Risk categories, prediction scores, engagement history, retention trends, and aggregate totals require backend endpoints that are not yet present in this branch’s backend contract.</p></div>
+    </section>
   </>;
 }
