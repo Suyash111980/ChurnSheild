@@ -763,3 +763,107 @@ select:focus-visible,
   .profile-recommendation-heading { flex-direction: column; }
   .profile-recommendations-panel .panel-heading { flex-direction: column; }
 }
+
+/* Every visible logo pixel comes from the provided PNG. */
+.animated-logo {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  background: #111827;
+  isolation: isolate;
+  vertical-align: middle;
+  border-radius: 9px;
+}
+.animated-logo--auth { width: 42px; height: 42px; }
+.animated-logo--auth-mobile { width: 38px; height: 38px; }
+.animated-logo--sidebar { width: 37px; height: 37px; }
+.animated-logo img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  mix-blend-mode: lighten;
+  user-select: none;
+  pointer-events: none;
+}
+.animated-logo__base { z-index: 1; }
+.animated-logo__shield,
+.animated-logo__arrow { z-index: 2; opacity: 0; }
+.animated-logo--auth .animated-logo__base,
+.animated-logo--auth-mobile .animated-logo__base {
+  animation: churnshield-logo-finish .5s cubic-bezier(.2,.7,.2,1) 1.18s both;
+}
+.animated-logo--sidebar .animated-logo__base {
+  animation: churnshield-logo-finish .68s cubic-bezier(.2,.7,.2,1) .42s both;
+}
+@supports ((mask-image: url("#")) or (-webkit-mask-image: url("#"))) {
+  .animated-logo__shield {
+    opacity: 1;
+    mask-image: var(--logo-shield-mask);
+    mask-mode: alpha;
+    mask-size: 100% 100%;
+    mask-repeat: no-repeat;
+    -webkit-mask-image: var(--logo-shield-mask);
+    -webkit-mask-size: 100% 100%;
+    -webkit-mask-repeat: no-repeat;
+  }
+  .animated-logo__arrow {
+    opacity: 1;
+    --logo-sweep: 0deg;
+    mask-image: var(--logo-arrow-mask), conic-gradient(from 225deg, #fff 0deg, #fff var(--logo-sweep), transparent var(--logo-sweep), transparent 360deg);
+    mask-mode: alpha, alpha;
+    mask-composite: intersect;
+    mask-size: 100% 100%, 100% 100%;
+    mask-repeat: no-repeat;
+    -webkit-mask-image: var(--logo-arrow-mask), conic-gradient(from 225deg, #fff 0deg, #fff var(--logo-sweep), transparent var(--logo-sweep), transparent 360deg);
+    -webkit-mask-composite: source-in;
+    -webkit-mask-size: 100% 100%, 100% 100%;
+    -webkit-mask-repeat: no-repeat;
+    filter: drop-shadow(0 0 0 rgba(181, 158, 255, 0));
+  }
+  .animated-logo--auth .animated-logo__shield,
+  .animated-logo--auth-mobile .animated-logo__shield {
+    animation: churnshield-shield-draw .7s cubic-bezier(.3,.75,.25,1) both;
+  }
+  .animated-logo--auth .animated-logo__arrow,
+  .animated-logo--auth-mobile .animated-logo__arrow {
+    animation: churnshield-arrow-sweep .8s cubic-bezier(.25,.72,.25,1) .62s both;
+  }
+  .animated-logo--sidebar .animated-logo__shield {
+    animation: churnshield-shield-draw .32s cubic-bezier(.3,.75,.25,1) both;
+  }
+  .animated-logo--sidebar .animated-logo__arrow {
+    animation: churnshield-arrow-sweep .38s cubic-bezier(.25,.72,.25,1) .27s both;
+  }
+}
+@keyframes churnshield-shield-draw {
+  0% { clip-path: polygon(50% 3%,50% 3%,50% 3%,50% 3%,50% 3%,50% 3%,50% 3%,50% 3%); }
+  100% { clip-path: polygon(50% 2%,90% 18%,90% 51%,82% 70%,67% 87%,50% 98%,33% 87%,18% 70%,10% 51%,10% 18%); }
+}
+@keyframes churnshield-arrow-sweep {
+  0% { --logo-sweep: 0deg; filter: drop-shadow(0 0 0 rgba(181,158,255,0)); }
+  62% { filter: drop-shadow(0 0 5px rgba(181,158,255,.72)); }
+  100% { --logo-sweep: 360deg; filter: drop-shadow(0 0 0 rgba(181,158,255,0)); }
+}
+@keyframes churnshield-logo-finish {
+  0% { opacity: .14; transform: scale(.94); }
+  72% { opacity: 1; transform: scale(1.012); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animated-logo__base,
+  .animated-logo__shield,
+  .animated-logo__arrow {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    clip-path: none !important;
+    --logo-sweep: 360deg;
+  }
+}
