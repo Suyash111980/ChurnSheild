@@ -3,6 +3,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useCallback,
   useState,
 } from "react";
 import { supabase } from "../lib/supabase";
@@ -15,17 +16,19 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [accountProfile, setAccountProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [authFlowInProgress, setAuthFlowInProgress] = useState(false);
+  const [authIntroIntent, setAuthIntroIntent] = useState(null);
 
-  async function refreshAccountProfile() {
-    setProfileLoading(true);
+  const refreshAccountProfile = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setProfileLoading(true);
     try {
       const profile = await apiRequest("/auth/status");
       setAccountProfile(profile);
       return profile;
     } finally {
-      setProfileLoading(false);
+      if (!silent) setProfileLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -75,29 +78,49 @@ export function AuthProvider({ children }) {
   }, []);
 
   async function signup({ name, email, password }) {
-    const { data, error } = await supabase.auth.signUp({
-      email: email.trim().toLowerCase(),
-      password,
-      options: {
-        data: { full_name: name.trim() },
-      },
-    });
+    setAuthIntroIntent(null);
+    setAuthFlowInProgress(true);
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password,
+        options: {
+          data: { full_name: name.trim() },
+        },
+      });
 
-    if (error) throw error;
-    if (data.session) await refreshAccountProfile();
-    return data;
+      if (error) throw error;
+      if (data.session) {
+        await refreshAccountProfile();
+        setAuthIntroIntent("signup");
+      }
+      return data;
+    } finally {
+      setAuthFlowInProgress(false);
+    }
   }
 
   async function login(email, password) {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
-      password,
-    });
+    setAuthIntroIntent(null);
+    setAuthFlowInProgress(true);
 
-    if (error) throw error;
-    await refreshAccountProfile();
-    return data;
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
+
+      if (error) throw error;
+      await refreshAccountProfile();
+      // One-shot UI handoff for a confirmed login; authorization is still enforced by ProtectedRoute.
+      setAuthIntroIntent("login");
+      return data;
+    } finally {
+      setAuthFlowInProgress(false);
+    }
   }
+
+  const consumeAuthIntro = useCallback(() => setAuthIntroIntent(null), []);
 
   async function logout() {
     const { error } = await supabase.auth.signOut();
@@ -109,8 +132,12 @@ export function AuthProvider({ children }) {
       value={{
         user,
         accountProfile,
+        refreshAccountProfile,
         loading,
         profileLoading,
+        authFlowInProgress,
+        authIntroIntent,
+        consumeAuthIntro,
         isAuthenticated: Boolean(user),
         signup,
         login,

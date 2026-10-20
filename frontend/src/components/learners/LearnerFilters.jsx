@@ -11,6 +11,8 @@ export default function LearnerFilters({
   presentations,
   onClear,
   hasFilters,
+  activeFilters = [],
+  onRemoveFilter,
 }) {
   return (
     <div className="table-toolbar">
@@ -44,6 +46,9 @@ export default function LearnerFilters({
           </button>
         )}
       </div>
+      {activeFilters.length > 0 && <div className="active-filter-chips" role="group" aria-label="Active learner filters">
+        {activeFilters.map((filter) => <button className="filter-chip" type="button" key={filter.key} onClick={() => onRemoveFilter?.(filter.key)} aria-label={`Remove ${filter.label} filter`}>{filter.label}<X size={12}/></button>)}
+      </div>}
     </div>
   );
 }

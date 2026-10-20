@@ -104,10 +104,26 @@ button:disabled,
     transform: scale(1.05);
   }
 
+  .dashboard-kpi-actionable:hover {
+    transform: translateY(-4px);
+    border-color: #cfc5ff;
+    box-shadow: 0 14px 28px rgb(38 36 82 / 12%), 0 0 0 1px rgb(105 72 245 / 5%);
+  }
+
+  .dashboard-kpi-actionable:hover .metric-icon {
+    transform: scale(1.07) rotate(-3deg);
+  }
+
   .top-avatar:hover {
     transform: scale(1.06);
     box-shadow: 0 5px 14px rgb(105 72 245 / 22%);
   }
+}
+
+.dashboard-kpi:not(.dashboard-kpi-actionable):hover {
+  transform: none;
+  border-color: #e4e8f0;
+  box-shadow: 0 4px 15px rgb(27 41 65 / 5%);
 }
 
 .learner-table tbody tr:hover {
@@ -343,6 +359,16 @@ select:focus-visible,
 .score-caption { font-size: 12px; }
 .score-details div { font-size: 13px; }
 .risk-score { font-variant-numeric: tabular-nums; }
+.feature-legend-controls { display: flex; flex-wrap: wrap; gap: 9px; margin: 18px 0 -4px; }
+.feature-legend-toggle { min-height: 30px; padding: 5px 9px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid #e7eaf0; border-radius: 16px; background: #fff; color: #8994a5; font: inherit; font-size: 11px; cursor: pointer; transition: background-color 170ms ease, border-color 170ms ease, color 170ms ease, box-shadow 170ms ease; }
+.feature-legend-toggle i { width: 8px; height: 8px; border-radius: 50%; background: #dc6d7d; opacity: .35; }
+.feature-legend-toggle.lower i { background: #28b9a3; }
+.feature-legend-toggle.selected { border-color: #ddd6fa; background: #faf9ff; color: #515e75; box-shadow: 0 2px 6px rgb(34 42 63 / 4%); }
+.feature-legend-toggle.selected i { opacity: 1; }
+.feature-legend-toggle:hover { border-color: #c8bcff; }
+.feature-legend-toggle:focus-visible { outline: 3px solid rgb(168 154 255 / 50%); outline-offset: 2px; }
+.feature-legend-note,.feature-empty { margin: 16px 0 0; color: #929dae; font-size: 12px; line-height: 1.5; }
+.feature-empty { text-align: center; padding: 16px; background: #faf9ff; border-radius: 7px; }
 .feature-bars { gap: 17px; }
 .feature-row {
   position: relative;
@@ -409,10 +435,13 @@ select:focus-visible,
   .feature-row > strong { font-size: 12px; }
   .feature-card { min-width: 0; }
   .feature-row > .feature-tooltip { right: 0; max-width: min(300px, 76vw); }
+  .feature-legend-controls { gap: 6px; }
+  .feature-legend-toggle { font-size: 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .analysis-spinner { animation: none; }
   .feature-row > .feature-track > b { will-change: auto; }
+  .feature-legend-toggle { transition: none; }
 }
 
 
@@ -569,4 +598,113 @@ select:focus-visible,
   .warning-kpis .compact-kpi > span:nth-of-type(2) { font-size: 13px; }
   .warning-panel .queue-heading { flex-direction: column; }
   .warning-panel .review-progress { width: 100%; text-align: left; }
+}
+@property --logo-sweep {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* Every visible logo pixel comes from the provided PNG. */
+.animated-logo {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  background: #111827;
+  isolation: isolate;
+  vertical-align: middle;
+  border-radius: 9px;
+}
+.animated-logo--auth { width: 42px; height: 42px; }
+.animated-logo--auth-mobile { width: 38px; height: 38px; }
+.animated-logo--sidebar { width: 37px; height: 37px; }
+.animated-logo img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  mix-blend-mode: lighten;
+  user-select: none;
+  pointer-events: none;
+}
+.animated-logo__base { z-index: 1; }
+.animated-logo__shield,
+.animated-logo__arrow { z-index: 2; opacity: 0; }
+.animated-logo--auth .animated-logo__base,
+.animated-logo--auth-mobile .animated-logo__base {
+  animation: churnshield-logo-finish .5s cubic-bezier(.2,.7,.2,1) 1.18s both;
+}
+.animated-logo--sidebar .animated-logo__base {
+  animation: churnshield-logo-finish .68s cubic-bezier(.2,.7,.2,1) .42s both;
+}
+@supports ((mask-image: url("#")) or (-webkit-mask-image: url("#"))) {
+  .animated-logo__shield {
+    opacity: 1;
+    mask-image: var(--logo-shield-mask);
+    mask-mode: alpha;
+    mask-size: 100% 100%;
+    mask-repeat: no-repeat;
+    -webkit-mask-image: var(--logo-shield-mask);
+    -webkit-mask-size: 100% 100%;
+    -webkit-mask-repeat: no-repeat;
+  }
+  .animated-logo__arrow {
+    opacity: 1;
+    --logo-sweep: 0deg;
+    mask-image: var(--logo-arrow-mask), conic-gradient(from 225deg, #fff 0deg, #fff var(--logo-sweep), transparent var(--logo-sweep), transparent 360deg);
+    mask-mode: alpha, alpha;
+    mask-composite: intersect;
+    mask-size: 100% 100%, 100% 100%;
+    mask-repeat: no-repeat;
+    -webkit-mask-image: var(--logo-arrow-mask), conic-gradient(from 225deg, #fff 0deg, #fff var(--logo-sweep), transparent var(--logo-sweep), transparent 360deg);
+    -webkit-mask-composite: source-in;
+    -webkit-mask-size: 100% 100%, 100% 100%;
+    -webkit-mask-repeat: no-repeat;
+    filter: drop-shadow(0 0 0 rgba(181, 158, 255, 0));
+  }
+  .animated-logo--auth .animated-logo__shield,
+  .animated-logo--auth-mobile .animated-logo__shield {
+    animation: churnshield-shield-draw .7s cubic-bezier(.3,.75,.25,1) both;
+  }
+  .animated-logo--auth .animated-logo__arrow,
+  .animated-logo--auth-mobile .animated-logo__arrow {
+    animation: churnshield-arrow-sweep .8s cubic-bezier(.25,.72,.25,1) .62s both;
+  }
+  .animated-logo--sidebar .animated-logo__shield {
+    animation: churnshield-shield-draw .32s cubic-bezier(.3,.75,.25,1) both;
+  }
+  .animated-logo--sidebar .animated-logo__arrow {
+    animation: churnshield-arrow-sweep .38s cubic-bezier(.25,.72,.25,1) .27s both;
+  }
+}
+@keyframes churnshield-shield-draw {
+  0% { clip-path: polygon(50% 3%,50% 3%,50% 3%,50% 3%,50% 3%,50% 3%,50% 3%,50% 3%); }
+  100% { clip-path: polygon(50% 2%,90% 18%,90% 51%,82% 70%,67% 87%,50% 98%,33% 87%,18% 70%,10% 51%,10% 18%); }
+}
+@keyframes churnshield-arrow-sweep {
+  0% { --logo-sweep: 0deg; filter: drop-shadow(0 0 0 rgba(181,158,255,0)); }
+  62% { filter: drop-shadow(0 0 5px rgba(181,158,255,.72)); }
+  100% { --logo-sweep: 360deg; filter: drop-shadow(0 0 0 rgba(181,158,255,0)); }
+}
+@keyframes churnshield-logo-finish {
+  0% { opacity: .14; transform: scale(.94); }
+  72% { opacity: 1; transform: scale(1.012); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animated-logo__base,
+  .animated-logo__shield,
+  .animated-logo__arrow {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    clip-path: none !important;
+    --logo-sweep: 360deg;
+  }
 }

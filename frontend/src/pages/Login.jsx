@@ -1,15 +1,15 @@
 
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   Eye,
   EyeOff,
-  ShieldCheck,
   ArrowRight,
   LockKeyhole,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
+import AnimatedLogo from "../components/common/AnimatedLogo";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -19,7 +19,6 @@ export default function Login() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const nav = useNavigate();
   const { login } = useAuth();
 
   const describeAuthError = (authError) => {
@@ -52,8 +51,9 @@ export default function Login() {
     setLoading(true);
 
     try {
+      // AuthContext raises a one-shot route intent only after Supabase and the account-status check resolve.
+      // GuestRoute then hands off to the authorized dashboard with the intro signal.
       await login(email.trim(), password);
-      nav("/dashboard", { replace: true });
     } catch (err) {
       setError(describeAuthError(err));
     } finally {
@@ -95,9 +95,7 @@ export default function Login() {
     <main className="auth-page">
       <section className="auth-brand-panel">
         <div className="auth-brand">
-          <div className="brand-icon">
-            <ShieldCheck size={22} />
-          </div>
+          <AnimatedLogo variant="auth" />
           <span>
             Churn<span className="brand-accent">Shield</span>
           </span>
@@ -142,9 +140,7 @@ export default function Login() {
 
       <section className="auth-main">
         <div className="auth-mobile-brand">
-          <div className="brand-icon">
-            <ShieldCheck size={21} />
-          </div>
+          <AnimatedLogo variant="auth-mobile" />
           Churn<span className="brand-accent">Shield</span>
         </div>
 

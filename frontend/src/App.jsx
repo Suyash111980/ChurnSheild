@@ -1,6 +1,8 @@
 
+import { useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { ThemeProvider } from "./context/ThemeContext";
 import AppLayout from "./components/layout/AppLayout";
 import Analytics from "./pages/Analytics";
 import Dashboard from "./pages/Dashboard";
@@ -21,7 +23,22 @@ import {
 } from "./pages/WorkspacePages";
 
 function ProtectedRoute({ children }) {
-  const { isAuthenticated, loading, accountProfile, profileLoading } = useAuth();
+  const {
+    isAuthenticated,
+    loading,
+    accountProfile,
+    profileLoading,
+    authFlowInProgress,
+    authIntroIntent,
+    consumeAuthIntro,
+  } = useAuth();
+
+  // Consume the one-shot intent whether approval succeeds or redirects to account status.
+  useEffect(() => {
+    if (isAuthenticated && !loading && !profileLoading && !authFlowInProgress && authIntroIntent) {
+      consumeAuthIntro();
+    }
+  }, [isAuthenticated, loading, profileLoading, authFlowInProgress, authIntroIntent, consumeAuthIntro]);
 
   if (loading) {
     return (
@@ -32,7 +49,7 @@ function ProtectedRoute({ children }) {
   }
 
   if (isAuthenticated && profileLoading) {
-    return <div className="auth-loading" role="status">Checking account approval...</div>;
+    return <AccountStatus />;
   }
 
   if (isAuthenticated && accountProfile?.approval_status !== "approved") {
@@ -43,7 +60,7 @@ function ProtectedRoute({ children }) {
 }
 
 function GuestRoute({ children }) {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, profileLoading, authFlowInProgress, authIntroIntent } = useAuth();
 
   if (loading) {
     return (
@@ -53,11 +70,22 @@ function GuestRoute({ children }) {
     );
   }
 
-  return isAuthenticated ? <Navigate to="/dashboard" replace /> : children;
+  // Keep the guest view mounted until a sign-in/sign-up flow and its profile check resolve.
+  // This lets the correct one-shot intro intent arrive before the guest redirect.
+  if (isAuthenticated && (profileLoading || authFlowInProgress)) return children;
+
+  return isAuthenticated ? (
+    <Navigate
+      to="/dashboard"
+      replace
+      state={authIntroIntent ? { showLoginIntro: true, introSize: authIntroIntent } : undefined}
+    />
+  ) : children;
 }
 
 export default function App() {
   return (
+    <ThemeProvider>
     <AuthProvider>
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -105,5 +133,6 @@ export default function App() {
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AuthProvider>
+    </ThemeProvider>
   );
 }
