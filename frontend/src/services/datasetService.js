@@ -1,4 +1,5 @@
-import { apiRequest } from "./apiClient";
+import { apiRequest } from "./apiClient.js";
+import { createDatasetService } from "./datasetServiceCore.js";
 
-export const uploadDataset = (formData) =>
-  apiRequest("/datasets/upload", { method: "POST", body: formData });
+const service = createDatasetService(apiRequest);
+export const { uploadDataset, listDatasets, previewDataset, getDataset, retryDataset, reprocessDataset } = service;

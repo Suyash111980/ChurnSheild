@@ -1,4 +1,29 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getDashboardSummary } from "../services/dashboardService";
-export function useDashboard() { const [data, setData] = useState(null); const [loading, setLoading] = useState(true); const [error, setError] = useState(null); useEffect(() => { let active = true; getDashboardSummary().then((result) => { if (active) setData(result); }).catch((reason) => { if (active) setError(reason); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, []); return { data, loading, error }; }
+import { useDataset } from "../context/DatasetContext";
+export function useDashboard() {
+  const { datasetId } = useDataset();
+  const [result, setResult] = useState({ datasetId: null, data: null, error: null, loading: true });
+  const [requestVersion, setRequestVersion] = useState(0);
+  useEffect(() => {
+    let active = true;
+    if (!datasetId) {
+      setResult({ datasetId: null, data: null, error: null, loading: false });
+      return () => { active = false; };
+    }
+    setResult({ datasetId, data: null, error: null, loading: true });
+    getDashboardSummary(datasetId)
+      .then((data) => { if (active) setResult({ datasetId, data, error: null, loading: false }); })
+      .catch((error) => { if (active) setResult({ datasetId, data: null, error, loading: false }); });
+    return () => { active = false; };
+  }, [datasetId, requestVersion]);
+  const retry = useCallback(() => setRequestVersion((version) => version + 1), []);
+  const current = result.datasetId === datasetId;
+  return {
+    data: current ? result.data : null,
+    error: current ? result.error : null,
+    loading: Boolean(datasetId) && (!current || result.loading),
+    retry,
+  };
+}
 

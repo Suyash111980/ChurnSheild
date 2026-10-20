@@ -26,7 +26,7 @@ export default function Learners() {
   const [presentation, setPresentation] = useState("");
   const [sort, setSort] = useState("id_student");
   const [direction, setDirection] = useState("asc");
-  const { data, loading, error, retry } = useLearners({ limit: PAGE_SIZE, offset });
+  const { data, total, loading, error, retry } = useLearners({ limit: PAGE_SIZE, offset });
 
   const modules = useMemo(() => [...new Set(data.map((item) => item.code_module).filter(Boolean))].sort(), [data]);
   const presentations = useMemo(() => [...new Set(data.map((item) => item.code_presentation).filter(Boolean))].sort(), [data]);
@@ -55,12 +55,12 @@ export default function Learners() {
 
   return <>
     <PageHeader eyebrow="LEARNER RECORDS" title="Learner Analytics" subtitle="Browse learner-course records returned by your ChurnShield API." />
-    <div className="illustrative-banner api-notice"><span className="banner-spark"><ShieldAlert size={16} /></span><span><strong>Backend fields available:</strong> learner identifiers, module, presentation, and demographic fields. Risk scores, risk categories, activity metrics, and display names are not currently returned by this API.</span></div>
+    <div className="illustrative-banner api-notice"><span className="banner-spark"><ShieldAlert size={16} /></span><span><strong>Verified backend fields:</strong> learner identifiers, course context, available demographics, and persisted latest risk values. Missing predictions remain unavailable rather than being inferred.</span></div>
     <section className="panel table-panel api-table-panel">
       <div className="api-table-heading"><div><h2>Learner records</h2><p>Search, filter, and sort the current API page. Page navigation uses backend limit and offset.</p></div><span className="api-count">{loading ? "Loading…" : `${filtered.length} shown on this page`}</span></div>
       <LearnerFilters search={search} onSearchChange={setSearch} module={module} onModuleChange={setModule} modules={modules} presentation={presentation} onPresentationChange={setPresentation} presentations={presentations} onClear={clearFilters} hasFilters={hasFilters} />
       {loading ? <LoadingState rows={6} label="Loading learner records" /> : error ? <ErrorState title="Learner records unavailable" message={errorMessage(error)} onRetry={retry} /> : data.length === 0 ? <EmptyState title="No learner records returned" message="The API returned an empty page. There may be no records, or this page may be beyond the available data." action={offset > 0 ? () => setPage(offset - PAGE_SIZE) : undefined} actionLabel="Previous page" /> : filtered.length === 0 ? <EmptyState title="No matching records" message="No records on this API page match your search and filters." action={clearFilters} /> : <LearnerTable learners={filtered} sort={sort} direction={direction} onSort={changeSort} />}
-      {!loading && !error && data.length > 0 && <div className="table-pagination api-pagination"><span>API records <strong>{offset + 1}–{offset + data.length}</strong> · total count is not provided by this endpoint</span><div><button className="page-button" disabled={offset === 0} onClick={() => setPage(offset - PAGE_SIZE)} aria-label="Previous API page"><ChevronLeft size={17} /></button><span className="page-number">Page {Math.floor(offset / PAGE_SIZE) + 1}</span><button className="page-button" disabled={data.length < PAGE_SIZE} onClick={() => setPage(offset + PAGE_SIZE)} aria-label="Next API page"><ChevronRight size={17} /></button></div></div>}
+      {!loading && !error && data.length > 0 && <div className="table-pagination api-pagination"><span>API records <strong>{offset + 1}–{offset + data.length} of {total}</strong></span><div><button className="page-button" disabled={offset === 0} onClick={() => setPage(offset - PAGE_SIZE)} aria-label="Previous API page"><ChevronLeft size={17} /></button><span className="page-number">Page {Math.floor(offset / PAGE_SIZE) + 1}</span><button className="page-button" disabled={offset + data.length >= total} onClick={() => setPage(offset + PAGE_SIZE)} aria-label="Next API page"><ChevronRight size={17} /></button></div></div>}
     </section>
     <p className="data-footnote"><span>ⓘ</span> Learner labels use backend display names when available; otherwise the learner ID is shown. Course context and database IDs remain separate.</p>
   </>;

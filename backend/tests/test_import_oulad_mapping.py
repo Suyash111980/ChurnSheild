@@ -12,7 +12,7 @@ IMPORTER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(IMPORTER)
 
 
-def test_source_student_identifier_is_kept_in_import_payload():
+def test_oulad_source_id_maps_to_canonical_database_column_and_dataset():
     frame = pd.DataFrame(
         [
             {
@@ -31,9 +31,11 @@ def test_source_student_identifier_is_kept_in_import_payload():
         ]
     )
 
-    [record] = IMPORTER.prepare_records(frame)
+    dataset_id = "723a41ce-7f26-4f3e-99b5-e950b62c5fb9"
+    [record] = IMPORTER.prepare_records(frame, dataset_id=dataset_id)
 
-    assert record["id_student"] == "123456789"
-    assert "external_learner_id" not in record
+    assert record["external_learner_id"] == "123456789"
+    assert record["dataset_id"] == dataset_id
+    assert "id_student" not in record
     assert record["code_module"] == "AAA"
     assert record["code_presentation"] == "2014J"

@@ -1,3 +1,28 @@
-import PageHeader from "../components/layout/PageHeader"; import { ArrowUpRight, TrendingDown, TrendingUp, Users, Clock3, Target } from "lucide-react";
-const courses=[["Product Design Foundations","642","94.2%",+4.8,"#4268e8"],["Data Analytics Essentials","518","89.7%",-2.3,"#16a582"],["Digital Marketing Strategy","436","91.4%",+1.6,"#9b75e8"],["UX Research Methods","381","87.9%",-1.1,"#e3a844"]];
-export default function Analytics(){return <><PageHeader eyebrow="PERFORMANCE & TRENDS" title="Analytics" subtitle="Explore the engagement patterns behind learner retention."/><div className="illustrative-banner"><span className="banner-spark">✳</span><span><strong>Illustrative demo data</strong> · Sample trends shown for preview only.</span></div><div className="analytics-kpis"><div className="panel analytics-kpi"><span className="analytics-kpi-icon blue"><Users size={17}/></span><span>Avg. engagement</span><strong>76.4 <small>/ 100</small></strong><em className="trend"><TrendingUp size={14}/> 4.2% vs last month</em></div><div className="panel analytics-kpi"><span className="analytics-kpi-icon violet"><Clock3 size={17}/></span><span>Weekly active time</span><strong>4.8 <small>hrs</small></strong><em className="trend"><TrendingUp size={14}/> 8.1% vs last month</em></div><div className="panel analytics-kpi"><span className="analytics-kpi-icon green"><Target size={17}/></span><span>Course completion</span><strong>68.2 <small>%</small></strong><em className="trend"><TrendingUp size={14}/> 2.6% vs last month</em></div></div><section className="panel course-panel"><div className="panel-heading"><div><h2>Course performance</h2><p>Engagement and retention indicators by course</p></div><button className="select-button">This month <span className="chevron">⌄</span></button></div><div className="course-list">{courses.map(([name,count,retention,change,color])=><div className="course-row" key={name}><span className="course-dot" style={{background:color}}/><strong>{name}</strong><span className="course-enrollment">{count} learners</span><div className="course-retention"><span>Retention</span><strong>{retention}</strong></div><span className={`course-change ${change>0?"up":"down"}`}>{change>0?<TrendingUp size={14}/>:<TrendingDown size={14}/>} {Math.abs(change)}%</span><ArrowUpRight className="course-arrow" size={16}/></div>)}</div></section><p className="data-footnote"><span>ⓘ</span> Course names and analytics above are fictional sample data.</p></>}
+import { Clock3, Target, Users } from "lucide-react";
+import PageHeader from "../components/layout/PageHeader";
+import { useDataset } from "../context/DatasetContext";
+import { useDashboard } from "../hooks/useDashboard";
+import LoadingState from "../components/common/LoadingState";
+import ErrorState from "../components/common/ErrorState";
+
+function Kpi({ Icon, label, value, note, tone }) {
+  return <article className="panel analytics-kpi"><span className={`analytics-kpi-icon ${tone}`}><Icon size={17}/></span><span>{label}</span><strong>{value}</strong><em>{note}</em></article>;
+}
+
+export default function Analytics() {
+  const { dataset } = useDataset();
+  const { data, loading, error, retry } = useDashboard();
+  return <><PageHeader eyebrow="PERFORMANCE & TRENDS" title="Analytics" subtitle={`${dataset?.dataset_name || "Selected dataset"} · verified descriptive statistics and persisted prediction coverage.`}/>
+    {loading && <LoadingState rows={2} label="Loading analytics"/>}
+    {error && <ErrorState title="Analytics unavailable" message="Dataset statistics could not be retrieved. No sample values are substituted." onRetry={retry}/>}
+    {data && <>
+      <div className="analytics-kpis">
+        <Kpi Icon={Users} tone="blue" label="Learner-course records" value={data.descriptive_statistics.learner_course_records.toLocaleString()} note="Observed in this dataset"/>
+        <Kpi Icon={Clock3} tone="violet" label="Course presentations" value={data.descriptive_statistics.course_presentations.toLocaleString()} note="Observed combinations"/>
+        <Kpi Icon={Target} tone="green" label="Prediction coverage" value={data.prediction_coverage == null ? "Unavailable" : `${(data.prediction_coverage * 100).toFixed(1)}%`} note={`${data.learners_with_prediction.toLocaleString()} persisted predictions`}/>
+      </div>
+      <section className="panel course-panel"><div className="panel-heading"><div><h2>Course performance</h2><p>Course-specific engagement and retention breakdowns are not provided by the current API.</p></div></div><div className="dashboard-api-note"><span><Target size={18}/></span><p>Dataset totals above are descriptive statistics. They are not model evaluation metrics and do not imply a course risk trend.</p></div></section>
+      <section className="panel"><div className="panel-heading"><div><h2>Model evaluation</h2><p>Offline held-out evaluation is managed separately from live dataset predictions.</p></div></div><p>Workspace-specific evaluation reports are not currently persisted. The platform-level OULAD evaluation, when available, is restricted to Master Admins.</p></section>
+    </>}
+  </>;
+}

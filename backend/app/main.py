@@ -6,6 +6,17 @@ from app.core.config import settings
 from app.api.routes.learners import router as learners_router
 from app.api.routes.account import router as account_router
 from app.api.routes.admin_users import router as admin_users_router
+from app.api.routes.predictions import (
+    learner_predictions_router,
+    router as predictions_router,
+)
+from app.api.routes.recommendations import router as recommendations_router
+from app.api.routes.early_warning import router as early_warning_router
+from app.api.routes.datasets import router as datasets_router
+from app.api.routes.dashboard import router as dashboard_router
+from app.api.routes.analytics import router as analytics_router
+from app.api.routes.reports import router as reports_router
+from app.api.routes.master_admin import router as master_admin_router
 
 app = FastAPI(
     title="ChurnShield API",
@@ -28,6 +39,15 @@ app.add_middleware(
 app.include_router(learners_router)
 app.include_router(account_router)
 app.include_router(admin_users_router)
+app.include_router(predictions_router)
+app.include_router(learner_predictions_router)
+app.include_router(recommendations_router)
+app.include_router(early_warning_router)
+app.include_router(datasets_router)
+app.include_router(dashboard_router)
+app.include_router(analytics_router)
+app.include_router(reports_router)
+app.include_router(master_admin_router)
 
 
 @app.get("/", tags=["Health"])
