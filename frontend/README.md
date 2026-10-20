@@ -52,26 +52,33 @@ Login and signup continue to use the existing Supabase Auth integration. The API
 | --- | --- | --- |
 | `/login` | Sign in with the configured Supabase project | Public/guest |
 | `/signup` | Create an account through the existing Supabase flow | Public/guest |
-| `/dashboard` | Dashboard metrics availability and API status | Protected |
-| `/learners` | Authenticated, paginated learner records | Protected |
-| `/learners/:learnerId` | Learner detail by database UUID; requires a detail API route | Protected |
-| `/analytics` | Existing analytics page | Protected |
-| `/early-warning` | Existing early-warning workspace | Protected |
-| `/root-cause` | Existing root-cause workspace | Protected |
-| `/recommendations` | Existing recommendations workspace | Protected |
-| `/course-insights` | Existing course insights | Protected |
-| `/reports` | Existing reports workspace | Protected |
-| `/settings` | Account and application settings | Protected |
+| `/dashboard` | Selected dataset summary and persisted risk distribution | Approved account |
+| `/datasets` | Preview, validate, upload, and reprocess a dataset | Approved Admin or Master Admin with active workspace |
+| `/learners` | Dataset-scoped learner records with backend pagination | Approved account |
+| `/learners/:learnerId` | Dataset-scoped profile by database UUID | Approved account |
+| `/analytics` | Dataset coverage, descriptive counts, and prediction coverage | Approved account |
+| `/early-warning` | Paginated saved predictions and available persisted evidence | Approved account |
+| `/root-cause` | Saved learner prediction and persisted explanations, when present | Approved account |
+| `/recommendations` | Persisted recommendations and permitted status changes | Approved account; status changes are role-limited |
+| `/course-insights` | Dataset coverage; course-specific metrics shown unavailable | Approved account |
+| `/reports` | Dataset-scoped learner CSV export | Approved account |
+| `/settings` | Dataset status, session controls, and browser-local preferences | Approved account |
+| `/admin/users` | Admin approval requests | Master Admin |
+| `/master-admin` | Platform account and workspace metadata | Master Admin |
+| `/master-admin/oulad` | Manual upload of the prepared OULAD cohort through the existing dataset flow | Master Admin |
 | `/account-status` | Approval status | Authenticated |
 
 ## Current backend integration contract
 
-- `GET /api/v1/learners?limit=<1..100>&offset=<n>` is implemented. It returns a `data` array and page metadata. The current contract does not provide a total count, search/filter/sort parameters, risk predictions, activity/performance signals, or `student_name`.
-- The learner page uses backend `limit`/`offset` pagination. Search, module/presentation filters, and sorting operate on the currently fetched page only.
-- When the backend includes `student_name` in a learner record, it is display-only. Otherwise the UI uses `Learner <id_student>` and keeps the database UUID, learner ID, module, and presentation distinct.
-- `GET /api/v1/learners/{id}` is not currently implemented. The profile route reports this dependency and uses the database UUID as its route identifier; it does not substitute fabricated profile information.
-- A dashboard summary/statistics endpoint is not currently implemented. The dashboard therefore shows no fabricated totals, risk distributions, retention rates, or trends.
-- Phase 1 and Phase 2 screens outside the API-backed learner and dashboard work remain in place. Backend, database, and ML integration changes are not part of this frontend branch.
+- Dataset operations use `POST /api/v1/datasets/preview`, `POST /api/v1/datasets/upload`, `GET /api/v1/datasets`, `GET /api/v1/datasets/{id}`, and `POST /api/v1/datasets/{id}/reprocess`. The UI previews validation before upload and displays the backend processing state. The API processes uploads synchronously; it does not provide background progress updates.
+- `GET /api/v1/dashboard/summary?dataset_id=...` returns real learner/course counts, prediction coverage, and nullable risk distribution. Missing prediction data remains unavailable; no retention-rate or historical-outcome chart is inferred.
+- Learner list and profile APIs are `GET /api/v1/learners?dataset_id=...&limit=...&offset=...` and `GET /api/v1/learners/{database_uuid}?dataset_id=...`. The list API supports exact learner-ID, module, presentation, and risk-category filters. The current page's free-text search, available filter choices, and sorting operate on the fetched page; results are not yet searched or sorted server-side by arbitrary text.
+- `GET /api/v1/predictions`, `GET /api/v1/predictions/{id}`, `GET /api/v1/predictions/{id}/explanations`, and `GET /api/v1/learners/{id}/predictions` are read-only. Prediction creation is performed by supported dataset processing, not a public `POST /predictions` API.
+- `GET /api/v1/early-warning` returns saved predictions and persisted evidence. `GET /api/v1/recommendations` returns persisted recommendations; `PATCH /api/v1/recommendations/{id}` changes status for authorized roles. Recommendation generation and explanation persistence are not implemented by the upload flow.
+- `GET /api/v1/reports/learners.csv?dataset_id=...` is the available export. Risk-analysis and recommendation exports, a generic `/reports/export`, and Excel export are not implemented.
+- `GET /api/v1/analytics/model-evaluation` and Master Admin overview/OULAD endpoints are Master Admin-only. Model training/evaluation diagnostics are not displayed in the Master Admin UI. Course-level breakdowns, weekly trends, workspace-specific model evaluation, and profile-update APIs are unavailable.
+- Admin approvals are backed by `/api/v1/admin/pending-users` and `/api/v1/admin/users/{id}/approval`. Settings preferences currently live in component state and are not persisted; profile editing is not available.
+- Optional `student_name` is display-only. Otherwise the UI uses the learner identifier and keeps database UUID, source learner ID, module, and presentation distinct.
 
 ## Source layout
 
@@ -88,12 +95,12 @@ src/
   main.jsx              React and browser-router entry point
 ```
 
-Install dependencies, start the backend and Supabase configuration, then run `npm run dev` from `frontend/`. Phase 3/4 displays live learner fields only where the current backend contract provides them; risk predictions, learner detail profiles, and dashboard aggregates remain dependent on backend endpoints and fields that are not yet implemented.
+Install dependencies, start the backend and configure Supabase, then run `npm run dev` from `frontend/`. Run `npm test` for the current Node test suite and `npm run build` for the Vite production build. End-to-end Supabase behavior requires a configured non-production project and deployed reviewed migrations; this README does not imply that live connectivity or database writes have been verified.
 
 ## Current interaction and chart integrations
 
 - The collapsible desktop sidebar and mobile navigation drawer use the existing routes and account-role visibility. The topbar profile menu reads the authenticated Supabase user and `/auth/status` profile; its logout action uses the existing Supabase logout flow.
 - The notification drawer is UI-only and intentionally shows an empty state. There is no notification API or event stream, so notifications, unread counts, and mark-as-read actions are not simulated.
 - Global search matches application sections locally. Learner search calls the existing learner API, fetches its first 100 records, and searches those results client-side; there is no server-side search endpoint.
-- The dashboard module chart counts records in the current first 20-record API page. Risk distribution and engagement history charts remain unavailable because the learner API does not provide risk or activity fields. KPI values remain unavailable unless the dashboard summary endpoint returns supported fields.
-- Root Cause Analysis and Early Warning Center still contain explicitly labeled illustrative demo data. These examples are not connected to a trained model, prediction endpoint, or notification source.
+- Dashboard and learner views use the selected dataset and persisted API responses. Historical outcomes and engagement timelines remain unavailable when the API does not provide those fields; no example values are presented as live results.
+- Root Cause Analysis and Early Warning Center use saved predictions and explanations when returned by the backend. The UI keeps model contributions distinct from causal evidence.

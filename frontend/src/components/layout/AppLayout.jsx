@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import Sidebar from "./Sidebar";
-import Topbar from "./Topbar";
+import { DatasetProvider } from "../../context/DatasetContext";
+import { useAuth } from "../../context/AuthContext";
 import LoginIntro from "../common/LoginIntro";
 import NotificationDrawer from "./NotificationDrawer";
+import Sidebar from "./Sidebar";
+import Topbar from "./Topbar";
 
 export default function AppLayout() {
   const [open, setOpen] = useState(false);
@@ -14,6 +16,7 @@ export default function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { pathname } = location;
+  const { accountProfile } = useAuth();
   const [showLoginIntro, setShowLoginIntro] = useState(
     () => pathname === "/dashboard" && location.state?.showLoginIntro === true
   );
@@ -41,12 +44,7 @@ export default function AppLayout() {
   }, []);
 
   useEffect(() => {
-    if (
-      consumedSignal.current ||
-      pathname !== "/dashboard" ||
-      location.state?.showLoginIntro !== true
-    ) return;
-
+    if (consumedSignal.current || pathname !== "/dashboard" || location.state?.showLoginIntro !== true) return;
     consumedSignal.current = true;
     // Remove the history-state signal immediately so refreshes and later route visits never replay it.
     navigate(
@@ -58,15 +56,27 @@ export default function AppLayout() {
   return (
     <>
       <div className={`app-shell${collapsed ? " sidebar-is-collapsed" : ""}`} inert={showLoginIntro || notificationOpen ? true : undefined} aria-hidden={showLoginIntro || notificationOpen || undefined}>
-        <Sidebar open={open} onClose={closeMenu} collapsed={collapsed} onToggleCollapse={() => setCollapsed((value) => !value)} inert={notificationOpen || showLoginIntro} menuTriggerRef={menuTriggerRef} />
+        <Sidebar
+          open={open}
+          onClose={closeMenu}
+          collapsed={collapsed}
+          onToggleCollapse={() => setCollapsed((value) => !value)}
+          inert={notificationOpen || showLoginIntro}
+          menuTriggerRef={menuTriggerRef}
+        />
         <div className="main-column" inert={open || notificationOpen || showLoginIntro ? true : undefined}>
-          <Topbar onMenu={openMenu} menuTriggerRef={menuTriggerRef} mobileNavOpen={open} onToggleNotifications={toggleNotifications} notificationOpen={notificationOpen} notificationTriggerRef={notificationTriggerRef} />
+          <Topbar
+            onMenu={openMenu}
+            menuTriggerRef={menuTriggerRef}
+            mobileNavOpen={open}
+            onToggleNotifications={toggleNotifications}
+            notificationOpen={notificationOpen}
+            notificationTriggerRef={notificationTriggerRef}
+          />
           <main className="page-content">
-            <div className="route-view" key={pathname}>
-              <Outlet />
-            </div>
+            <DatasetProvider><div className="route-view" key={pathname}><Outlet /></div></DatasetProvider>
           </main>
-          <footer className="app-footer">ChurnShield <span>•</span> Authenticated workspace · API-backed learner records</footer>
+          <footer className="app-footer">ChurnShield <span>•</span> {accountProfile?.app_role === "master_admin" ? "Platform administration" : "Authenticated workspace · API-backed learner records"}</footer>
         </div>
       </div>
       {showLoginIntro && <LoginIntro size={introSize} onComplete={completeLoginIntro} />}

@@ -15,7 +15,10 @@ class Settings(BaseSettings):
     supabase_secret_key: str = ""
     supabase_jwt_issuer: str = ""
     supabase_jwt_algorithm: str = "ES256"
+    master_admin_user_id: str = ""
     model_path: str = "../ml/artifacts/churn_model.joblib"
+    model_approved_version: str = ""
+    student_display_csv_path: str = "../ml/data/sample/student_display.csv"
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_ROOT / ".env",
@@ -44,6 +47,12 @@ class Settings(BaseSettings):
             for origin in self.cors_origins.split(",")
             if origin.strip()
         ]
+
+    def resolve_backend_path(self, configured_path: str) -> Path:
+        path = Path(configured_path).expanduser()
+        if not path.is_absolute():
+            path = BACKEND_ROOT / path
+        return path.resolve()
 
 
 @lru_cache

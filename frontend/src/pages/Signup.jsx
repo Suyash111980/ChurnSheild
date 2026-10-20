@@ -20,6 +20,7 @@ export default function Signup() {
   });
   const [show, setShow] = useState(false);
   const [terms, setTerms] = useState(false);
+  const [requestAdmin, setRequestAdmin] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -69,6 +70,7 @@ export default function Signup() {
         name: form.name,
         email: form.email,
         password: form.password,
+        requestAdmin,
       });
 
       if (!data.session) {
@@ -160,6 +162,11 @@ export default function Signup() {
           </div>
 
           <form onSubmit={submit} noValidate aria-busy={loading}>
+            <label className="check-row terms-row">
+              <input type="checkbox" checked={requestAdmin} onChange={(event) => setRequestAdmin(event.target.checked)} />
+              <span className="checkmark" />
+              Request an Admin workspace (approval required)
+            </label>
             <label className="field-label" htmlFor="name">
               Full name
             </label>

@@ -1,3 +1,12 @@
+export class ApiRequestError extends Error {
+  constructor(status, detail = null) {
+    super(`API request failed (${status})`);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
 export function createApiClient({ supabase, baseUrl, fetchImpl = fetch }) {
   async function currentAccessToken() {
     const { data, error } = await supabase.auth.getSession();
@@ -36,7 +45,16 @@ export function createApiClient({ supabase, baseUrl, fetchImpl = fetch }) {
 
   async function apiRequest(path, options = {}) {
     const response = await apiFetch(path, options);
-    if (!response.ok) throw new Error(`API request failed (${response.status})`);
+    if (!response.ok) {
+      let detail = null;
+      try {
+        const body = await response.clone().json();
+        if (typeof body?.detail === "string") detail = body.detail.slice(0, 240);
+      } catch {
+        // Keep the HTTP status when the response is not JSON.
+      }
+      throw new ApiRequestError(response.status, detail);
+    }
     return response.json();
   }
 

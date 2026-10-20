@@ -1,34 +1,38 @@
 import { useCallback, useEffect, useState } from "react";
 import { getLearners } from "../services/learnerService";
+import { useDataset } from "../context/DatasetContext";
 
 export function useLearners({ limit = 20, offset = 0 } = {}) {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { datasetId } = useDataset();
+  const [page, setPage] = useState({ datasetId: null, data: [], total: 0, loading: true, error: null });
   const [requestVersion, setRequestVersion] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    setError(null);
+    setPage({ datasetId, data: [], total: 0, loading: Boolean(datasetId), error: null });
 
-    getLearners({ limit, offset }, { signal: controller.signal })
+    if (!datasetId) return () => controller.abort();
+    getLearners({ dataset_id: datasetId, limit, offset }, { signal: controller.signal })
       .then((result) => {
         if (!Array.isArray(result?.data)) {
           throw new Error("The learner service returned an unexpected response.");
         }
-        setData(result.data);
+        setPage({ datasetId, data: result.data, total: Number(result.total) || 0, loading: false, error: null });
       })
-      .catch((reason) => {
-        if (reason.name !== "AbortError") setError(reason);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+      .catch((error) => {
+        if (error.name !== "AbortError") setPage({ datasetId, data: [], total: 0, loading: false, error });
       });
 
     return () => controller.abort();
-  }, [limit, offset, requestVersion]);
+  }, [datasetId, limit, offset, requestVersion]);
 
   const retry = useCallback(() => setRequestVersion((version) => version + 1), []);
-  return { data, loading, error, retry };
+  const current = page.datasetId === datasetId;
+  return {
+    data: current ? page.data : [],
+    total: current ? page.total : 0,
+    loading: Boolean(datasetId) && (!current || page.loading),
+    error: current ? page.error : null,
+    retry,
+  };
 }

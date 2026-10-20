@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://churnshield.local/schemas/recommendation-v1.json",
+  "title": "ChurnShield advisory recommendation results",
+  "description": "An array of advisory suggestions per input row; empty arrays mean no supported rule fired.",
+  "type": "array",
+  "items": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "required": ["rule_id", "action", "evidence", "requires_human_review"],
+      "additionalProperties": false,
+      "properties": {
+        "rule_id": {
+          "type": "string",
+          "enum": ["no_observed_vle_activity_by_cutoff", "assessment_without_submission_recorded_by_cutoff"]
+        },
+        "action": {"type": "string", "minLength": 1},
+        "evidence": {
+          "type": "object",
+          "required": ["feature", "observed_value", "interpretation"],
+          "additionalProperties": false,
+          "properties": {
+            "feature": {
+              "type": "string",
+              "enum": ["vle_has_activity_by_cutoff", "assessments_without_submission_recorded_by_cutoff"]
+            },
+            "observed_value": {"type": "integer", "minimum": 0},
+            "interpretation": {"type": "string", "minLength": 1}
+          }
+        },
+        "requires_human_review": {"const": true}
+      }
+    }
+  }
+}

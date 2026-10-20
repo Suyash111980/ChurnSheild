@@ -1,0 +1,60 @@
+{
+  "schema_version": "oulad-learner-v1",
+  "target_column": "target_withdrawn",
+  "target_mapping": {
+    "Withdrawn": 1,
+    "Pass": 0,
+    "Fail": 0,
+    "Distinction": 0
+  },
+  "analysis_unit": "learner-course-presentation row",
+  "identifier_columns": [
+    "id_student",
+    "code_module",
+    "code_presentation"
+  ],
+  "categorical_features": [
+    "code_module",
+    "code_presentation"
+  ],
+  "numeric_features": [
+    "num_of_prev_attempts",
+    "studied_credits",
+    "module_presentation_length",
+    "registration_record_present",
+    "registration_by_cutoff",
+    "registration_day_at_cutoff",
+    "registration_date_missing",
+    "assessments_due_by_cutoff",
+    "assessment_submissions_by_cutoff",
+    "assessment_late_submissions_by_cutoff",
+    "assessments_without_submission_recorded_by_cutoff",
+    "assessment_banked_results_by_cutoff",
+    "assessment_submission_rate_by_cutoff",
+    "vle_total_clicks_by_cutoff",
+    "vle_active_days_by_cutoff",
+    "vle_distinct_resources_by_cutoff",
+    "vle_clicks_day_0_7",
+    "vle_clicks_day_8_cutoff",
+    "vle_has_activity_by_cutoff",
+    "vle_days_since_last_activity_at_cutoff"
+  ],
+  "excluded_columns": [
+    "id_student",
+    "target_withdrawn",
+    "final_result",
+    "date_unregistration",
+    "student_name",
+    "gender",
+    "region",
+    "highest_education",
+    "imd_band",
+    "age_band",
+    "disability"
+  ],
+  "risk_bands": {
+    "low_max_exclusive": 0.3,
+    "high_min_inclusive": 0.7,
+    "status": "provisional; requires operational review before deployment"
+  }
+}

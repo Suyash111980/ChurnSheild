@@ -1,11 +1,4 @@
-
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useCallback,
-  useState,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { apiRequest } from "../services/apiClient";
 
@@ -16,15 +9,24 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [accountProfile, setAccountProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [profileErrorStatus, setProfileErrorStatus] = useState(null);
+  const [profileErrorDetail, setProfileErrorDetail] = useState(null);
   const [authFlowInProgress, setAuthFlowInProgress] = useState(false);
   const [authIntroIntent, setAuthIntroIntent] = useState(null);
 
   const refreshAccountProfile = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setProfileLoading(true);
+    setProfileErrorStatus(null);
+    setProfileErrorDetail(null);
     try {
       const profile = await apiRequest("/auth/status");
       setAccountProfile(profile);
       return profile;
+    } catch (error) {
+      setAccountProfile(null);
+      setProfileErrorStatus(Number.isInteger(error?.status) ? error.status : null);
+      setProfileErrorDetail(typeof error?.detail === "string" ? error.detail : null);
+      throw error;
     } finally {
       if (!silent) setProfileLoading(false);
     }
@@ -32,43 +34,76 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let mounted = true;
+    let profileLoadId = 0;
 
     async function initializeSession() {
       const { data, error } = await supabase.auth.getSession();
-
       if (!mounted) return;
 
       const session = error ? null : data.session;
       setUser(session?.user ?? null);
+      let loadId = profileLoadId;
       if (session) {
+        loadId = ++profileLoadId;
         try {
           const profile = await apiRequest("/auth/status");
-          if (mounted) setAccountProfile(profile);
-        } catch {
-          if (mounted) setAccountProfile(null);
+          if (mounted && loadId === profileLoadId) {
+            setAccountProfile(profile);
+            setProfileErrorStatus(null);
+            setProfileErrorDetail(null);
+          }
+        } catch (profileError) {
+          if (mounted && loadId === profileLoadId) {
+            setAccountProfile(null);
+            setProfileErrorStatus(Number.isInteger(profileError?.status) ? profileError.status : null);
+            setProfileErrorDetail(typeof profileError?.detail === "string" ? profileError.detail : null);
+          }
         }
       } else {
+        profileLoadId += 1;
         setAccountProfile(null);
+        setProfileErrorStatus(null);
+        setProfileErrorDetail(null);
       }
-      if (mounted) setProfileLoading(false);
+      if (mounted && (!session || loadId === profileLoadId)) setProfileLoading(false);
       setLoading(false);
     }
 
-    initializeSession();
+    void initializeSession();
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (mounted) {
-        setUser(session?.user ?? null);
-        if (!session) {
-          setAccountProfile(null);
-          setProfileLoading(false);
-        } else if (_event === "SIGNED_IN") {
-          setProfileLoading(true);
-        }
-        setLoading(false);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+      setUser(session?.user ?? null);
+      if (!session) {
+        profileLoadId += 1;
+        setAccountProfile(null);
+        setProfileErrorStatus(null);
+        setProfileErrorDetail(null);
+        setProfileLoading(false);
+      } else if (event === "SIGNED_IN") {
+        const loadId = ++profileLoadId;
+        setProfileLoading(true);
+        // Resolve the trusted backend role for restored or externally initiated sessions too.
+        Promise.resolve().then(async () => {
+          try {
+            const profile = await apiRequest("/auth/status");
+            if (mounted && loadId === profileLoadId) {
+              setAccountProfile(profile);
+              setProfileErrorStatus(null);
+              setProfileErrorDetail(null);
+            }
+          } catch (profileError) {
+            if (mounted && loadId === profileLoadId) {
+              setAccountProfile(null);
+              setProfileErrorStatus(Number.isInteger(profileError?.status) ? profileError.status : null);
+              setProfileErrorDetail(typeof profileError?.detail === "string" ? profileError.detail : null);
+            }
+          } finally {
+            if (mounted && loadId === profileLoadId) setProfileLoading(false);
+          }
+        });
       }
+      setLoading(false);
     });
 
     return () => {
@@ -77,7 +112,7 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  async function signup({ name, email, password }) {
+  async function signup({ name, email, password, requestAdmin = false }) {
     setAuthIntroIntent(null);
     setAuthFlowInProgress(true);
     try {
@@ -85,10 +120,12 @@ export function AuthProvider({ children }) {
         email: email.trim().toLowerCase(),
         password,
         options: {
-          data: { full_name: name.trim() },
+          data: {
+            full_name: name.trim(),
+            ...(requestAdmin ? { requested_role: "admin" } : {}),
+          },
         },
       });
-
       if (error) throw error;
       if (data.session) {
         await refreshAccountProfile();
@@ -103,16 +140,13 @@ export function AuthProvider({ children }) {
   async function login(email, password) {
     setAuthIntroIntent(null);
     setAuthFlowInProgress(true);
-
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
       });
-
       if (error) throw error;
       await refreshAccountProfile();
-      // One-shot UI handoff for a confirmed login; authorization is still enforced by ProtectedRoute.
       setAuthIntroIntent("login");
       return data;
     } finally {
@@ -128,22 +162,22 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        accountProfile,
-        refreshAccountProfile,
-        loading,
-        profileLoading,
-        authFlowInProgress,
-        authIntroIntent,
-        consumeAuthIntro,
-        isAuthenticated: Boolean(user),
-        signup,
-        login,
-        logout,
-      }}
-    >
+    <AuthContext.Provider value={{
+      user,
+      accountProfile,
+      profileErrorStatus,
+      profileErrorDetail,
+      refreshAccountProfile,
+      loading,
+      profileLoading,
+      authFlowInProgress,
+      authIntroIntent,
+      consumeAuthIntro,
+      isAuthenticated: Boolean(user),
+      signup,
+      login,
+      logout,
+    }}>
       {children}
     </AuthContext.Provider>
   );
@@ -151,10 +185,6 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-
-  if (!context) {
-    throw new Error("useAuth must be used within AuthProvider");
-  }
-
+  if (!context) throw new Error("useAuth must be used within AuthProvider");
   return context;
 }

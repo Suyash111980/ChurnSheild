@@ -1,36 +1,36 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useDataset } from "../context/DatasetContext";
 import { getDashboardSummary } from "../services/dashboardService";
 
 export function useDashboard() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(null);
-  const requestId = useRef(0);
-
-  const refresh = useCallback(async ({ initial = false } = {}) => {
-    const currentRequest = ++requestId.current;
-    if (initial) setLoading(true);
-    else setRefreshing(true);
-    setError(null);
-
-    try {
-      const result = await getDashboardSummary();
-      if (currentRequest === requestId.current) setData(result);
-    } catch (reason) {
-      if (currentRequest === requestId.current) setError(reason);
-    } finally {
-      if (currentRequest === requestId.current) {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    }
-  }, []);
+  const { datasetId } = useDataset();
+  const [result, setResult] = useState({ datasetId: null, data: null, error: null, loading: true });
+  const [requestVersion, setRequestVersion] = useState(0);
 
   useEffect(() => {
-    refresh({ initial: true });
-    return () => { requestId.current += 1; };
-  }, [refresh]);
+    let active = true;
+    if (!datasetId) {
+      setResult({ datasetId: null, data: null, error: null, loading: false });
+      return () => { active = false; };
+    }
 
-  return { data, loading, refreshing, error, refresh: () => refresh() };
+    setResult({ datasetId, data: null, error: null, loading: true });
+    getDashboardSummary(datasetId)
+      .then((data) => { if (active) setResult({ datasetId, data, error: null, loading: false }); })
+      .catch((error) => { if (active) setResult({ datasetId, data: null, error, loading: false }); });
+    return () => { active = false; };
+  }, [datasetId, requestVersion]);
+
+  const retry = useCallback(() => setRequestVersion((version) => version + 1), []);
+  const current = result.datasetId === datasetId;
+  const loading = Boolean(datasetId) && (!current || result.loading);
+
+  return {
+    data: current ? result.data : null,
+    error: current ? result.error : null,
+    loading,
+    refreshing: false,
+    retry,
+    refresh: retry,
+  };
 }

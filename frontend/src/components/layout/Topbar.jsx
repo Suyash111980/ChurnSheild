@@ -7,7 +7,7 @@ import { getAvatarDetails } from "../../utils/userAvatar";
 import GlobalSearch from "./GlobalSearch";
 import "./InteractiveNavigation.css";
 
-const titles = { "/dashboard": "Dashboard", "/learners": "Learner Analytics", "/analytics": "Analytics", "/early-warning": "Early Warning Center", "/root-cause": "Root Cause Analysis", "/recommendations": "Recommendations", "/course-insights": "Course Insights", "/reports": "Reports", "/settings": "Settings" };
+const titles = { "/dashboard": "Dashboard", "/learners": "Learner Analytics", "/analytics": "Analytics", "/early-warning": "Early Warning Center", "/root-cause": "Root Cause Analysis", "/recommendations": "Recommendations", "/course-insights": "Course Insights", "/reports": "Reports", "/settings": "Settings", "/master-admin": "Platform Overview", "/admin/users": "Admin requests" };
 
 export default function Topbar({ onMenu, menuTriggerRef, mobileNavOpen, onToggleNotifications, notificationOpen, notificationTriggerRef }) {
   const { pathname } = useLocation();

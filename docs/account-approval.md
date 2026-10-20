@@ -1,78 +1,38 @@
-# Account approval and first Admin bootstrap
+# Master Admin approval and workspace bootstrap
 
-## Deployment
+## Migration review and deployment order
 
-Apply `database/migrations/003_account_approval.sql` through the project's reviewed Supabase migration process after reviewing the SQL. This migration adds a nullable `profiles.approval_status`, constrains non-null values to `pending`, `approved`, or `denied`, and installs an Auth-user insert trigger. The trigger creates a profile with role `educator` and status `pending` for a new Auth user. If a profile with the same ID already exists, it leaves that profile unchanged; it does not read user metadata.
+Review and deploy the complete migration chain in order: **001 → 002 → 003 → 004 → 005 → 006 → 007** (`001_initial_schema.sql`, `002_align_oulad_schema.sql`, `003_account_approval.sql`, `004_latest_learner_data_views.sql`, `005_dataset_ownership.sql`, `006_master_admin_workspaces.sql`, and `007_idempotent_model_predictions.sql`). Migration 001 creates only the initial schema; it is not the complete schema required by the current backend. Migration 006 records an Admin request from signup metadata but always creates a pending `educator` profile; metadata never grants a role or approval. It adds a one-to-one Admin workspace, a dataset workspace foreign key, and a service-role-only transaction for approval/rejection. It does not assign historical datasets or learner rows to a workspace. Migration 007 adds the learner/model prediction uniqueness contract and stops on duplicates for manual review. No migration has been applied by this implementation.
 
-The migration deliberately has no default and does not update existing profile rows. Existing profiles therefore have `approval_status = NULL` after deployment and are blocked by backend authorization until an operator reviews and explicitly classifies them. Existing Auth users without profiles are not backfilled. The pending-users endpoint lists only rows explicitly marked `pending`.
+`database/proposals/phase4b_recommendation_idempotency.sql` is a separate proposal, not part of migrations 001–007. It requires independent schema/data review and explicit authorization before any deployment.
 
-Before any manual existing-user updates, inventory Auth users and profiles, verify each person's identity through the approved organization process, and record the role decision. To place one reviewed existing account into the approval queue, use its verified Auth UUID in a controlled SQL session:
+Before deployment, review the `security definer` functions, grants, RLS behavior, existing triggers, historical `NULL` owner/dataset/workspace rows, and the fact that datasets created before migration 006 have no workspace. Run migrations only through the project's controlled migration process after database review.
 
-```sql
-insert into public.profiles (id, role, approval_status)
-select id, 'educator', 'pending'
-from auth.users
-where id = 'REPLACE-WITH-VERIFIED-AUTH-UUID'
-on conflict (id) do update
-set approval_status = 'pending',
-    updated_at = now();
-```
+## Designating the Master Admin
 
-This preserves any existing database role until an Admin approves the account and explicitly assigns its application role. Execute the statement separately for each reviewed account; do not run it as a bulk backfill.
+There is no public Master Admin creation endpoint. Bootstrap requires a trusted operator:
 
-## First Admin bootstrap
+1. Create or verify the owner's account using Supabase Auth and independently verify the Auth UUID.
+2. Through a trusted database operator session, ensure that UUID has a profile with `role='admin'` and `approval_status='approved'`. Do not use signup metadata to do this.
+3. Configure the backend-only `MASTER_ADMIN_USER_ID` environment variable with that verified UUID. Never set it in frontend/Vite variables.
+4. Sign in and verify `/api/v1/auth/status` reports `app_role: master_admin`. Backend elevation is granted only when the verified JWT subject matches the configured UUID and the trusted profile is approved with role `admin`.
 
-There is intentionally no public Admin-creation endpoint. After deploying the migration:
+The Master Admin has platform-management access, not an Admin customer workspace. Keep this UUID configuration controlled and reviewed. If the designated account changes, update the server configuration through the secret-management process and verify access before removing the old designation.
 
-1. Have the designated initial administrator create an account through the normal Supabase signup flow and complete any required email confirmation.
-2. Verify the person's identity and exact Auth email/UUID through the organization's approved process and Supabase Auth console.
-3. As a trusted database operator, run the following one-time guarded statement in the Supabase SQL editor, replacing the placeholder with the verified email. It promotes only that user's pending profile and refuses to run if an approved Admin already exists.
+## Admin request flow
 
-```sql
-do $$
-declare
-    target_id uuid;
-begin
-    perform pg_advisory_xact_lock(hashtext('churnshield-first-admin-bootstrap'));
+The signup UI lets a person explicitly request an Admin workspace. When selected, it sends `requested_role=admin`; migration 006's Auth trigger stores that only in `profiles.requested_role`. Public signup metadata never sets `profiles.role` or `approval_status`. Every new account starts as `educator/pending`, with no workspace. Only the configured Master Admin can list Admin requests and review them. Approval invokes one transaction that sets `role=admin`, marks the profile approved, and creates exactly one workspace. Repeating approval returns the same workspace. Rejection marks the account denied. Legacy account approval endpoints use this Master Admin gate.
 
-    if exists (
-        select 1 from public.profiles
-        where role = 'admin' and approval_status = 'approved'
-    ) then
-        raise exception 'An approved Admin already exists';
-    end if;
+An account that does not request an Admin workspace also remains `educator/pending`. The current approval queue contains only explicit Admin requests, so there is no supported application flow to approve such a signup. Do not approve it by changing metadata or granting a role implicitly. Product owners must decide whether non-Admin signups should be disabled, offered a future supported role/onboarding path, or remain pending without application access. Until that decision is made, only explicitly requested Admin accounts can enter the approval workflow.
 
-    select id into target_id
-    from auth.users
-    where lower(email) = lower('REPLACE-WITH-VERIFIED-ADMIN-EMAIL');
+Legacy `educator`/`analyst` profiles remain represented for compatibility but do not receive workspace access in this workflow. No additional Retention Manager or Analyst approval queue is introduced.
 
-    if target_id is null then
-        raise exception 'No Auth user matches the verified email';
-    end if;
+The supported application roles are `admin` and the configured `master_admin` overlay. Approved legacy `educator` and `analyst` rows are not mapped to either role and are denied application access. Keep their records unchanged. Before any role migration or account remediation, inventory the affected accounts, confirm identity and intended access with account owners, define a reviewed remediation plan, and obtain approval for any schema or data change. Never infer a role from historical activity or signup metadata.
 
-    update public.profiles
-    set role = 'admin', approval_status = 'approved', updated_at = now()
-    where id = target_id and approval_status = 'pending';
+## Historical records
 
-    if not found then
-        raise exception 'The verified user has no pending profile';
-    end if;
-end
-$$;
-```
+Migration 006 does not backfill existing accounts or datasets. Existing approved Admins do not automatically receive workspaces, and existing datasets with no `workspace_id` remain inaccessible through Admin workspace APIs. Inventory accounts and uploads, verify ownership with the responsible users, and perform a reviewed, explicit reconciliation before assigning workspaces. Never attach ambiguous records to the first Admin or to the Master Admin. Leave records unassigned until they can be attributed safely.
 
-4. Confirm the single expected profile is approved with role `admin`, then sign in through the application. That Admin can review later pending accounts at **Account approvals**.
+## Reference OULAD data
 
-Keep this procedure restricted to a trusted operator and do not put the SQL editor credentials or service keys in source control or frontend configuration.
-
-## Role values
-
-The approval API accepts application roles and stores their existing database equivalents:
-
-| Application role | `profiles.role` |
-| --- | --- |
-| Admin (`admin`) | `admin` |
-| Retention Manager (`retention_manager`) | `educator` |
-| Analyst (`data_analyst`) | `analyst` |
-
-Denied users retain their current database role, but backend authorization rejects them because their approval status is not `approved`.
+The Master Admin OULAD page reads the prepared local file under `ml/data/processed` and local model metadata/evaluation artifacts. It labels this as local reference data and reports `imported_to_supabase=false`; it does not upload it. Normal Admins have no route to the platform-level OULAD API or held-out evaluation endpoint. A future OULAD import must be an explicit, reviewed dataset operation scoped to a chosen Admin workspace.

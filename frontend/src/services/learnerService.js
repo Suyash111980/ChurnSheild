@@ -5,5 +5,5 @@ export const getLearners = (params = {}, options = {}) => {
   return apiRequest(`/learners?${query}`, options);
 };
 
-export const getLearner = (learnerId, options = {}) =>
-  apiRequest(`/learners/${encodeURIComponent(learnerId)}`, options);
+export const getLearner = (learnerId, datasetId, options = {}) =>
+  apiRequest(`/learners/${encodeURIComponent(learnerId)}?dataset_id=${encodeURIComponent(datasetId)}`, options);

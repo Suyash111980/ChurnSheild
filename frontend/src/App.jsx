@@ -1,6 +1,5 @@
-
 import { useEffect } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import AppLayout from "./components/layout/AppLayout";
@@ -14,13 +13,15 @@ import Settings from "./pages/Settings";
 import Signup from "./pages/Signup";
 import AccountStatus from "./pages/AccountStatus";
 import AdminApprovals from "./pages/AdminApprovals";
-import {
-  CourseInsights,
-  EarlyWarning,
-  Recommendations,
-  Reports,
-  RootCause,
-} from "./pages/WorkspacePages";
+import DatasetImport from "./pages/DatasetImport";
+import EarlyWarning from "./pages/EarlyWarning";
+import Recommendations from "./pages/Recommendations";
+import Reports from "./pages/Reports";
+import RootCause from "./pages/RootCause";
+import CourseInsights from "./pages/CourseInsights";
+import MasterAdminDashboard from "./pages/MasterAdminDashboard";
+import OuladOverview from "./pages/OuladOverview";
+import { roleRedirect } from "./utils/roleNavigation";
 
 function ProtectedRoute({ children }) {
   const {
@@ -32,6 +33,7 @@ function ProtectedRoute({ children }) {
     authIntroIntent,
     consumeAuthIntro,
   } = useAuth();
+  const location = useLocation();
 
   // Consume the one-shot intent whether approval succeeds or redirects to account status.
   useEffect(() => {
@@ -41,34 +43,32 @@ function ProtectedRoute({ children }) {
   }, [isAuthenticated, loading, profileLoading, authFlowInProgress, authIntroIntent, consumeAuthIntro]);
 
   if (loading) {
-    return (
-      <div className="auth-loading" role="status">
-        Checking session...
-      </div>
-    );
+    return <div className="auth-loading" role="status">Checking session...</div>;
   }
 
-  if (isAuthenticated && profileLoading) {
-    return <AccountStatus />;
-  }
+  if (isAuthenticated && profileLoading) return <AccountStatus />;
 
   if (isAuthenticated && accountProfile?.approval_status !== "approved") {
     return <Navigate to="/account-status" replace />;
   }
 
+  const roleTarget = isAuthenticated && accountProfile?.approval_status === "approved"
+    ? roleRedirect(accountProfile.app_role, location.pathname)
+    : null;
+  if (roleTarget) return <Navigate to={roleTarget} replace />;
+
   return isAuthenticated ? children : <Navigate to="/login" replace />;
+}
+
+function MasterOnly({ children }) {
+  const { accountProfile } = useAuth();
+  return accountProfile?.app_role === "master_admin" ? children : <Navigate to="/dashboard" replace />;
 }
 
 function GuestRoute({ children }) {
   const { isAuthenticated, loading, profileLoading, authFlowInProgress, authIntroIntent } = useAuth();
 
-  if (loading) {
-    return (
-      <div className="auth-loading" role="status">
-        Checking session...
-      </div>
-    );
-  }
+  if (loading) return <div className="auth-loading" role="status">Checking session...</div>;
 
   // Keep the guest view mounted until a sign-in/sign-up flow and its profile check resolve.
   // This lets the correct one-shot intro intent arrive before the guest redirect.
@@ -86,53 +86,31 @@ function GuestRoute({ children }) {
 export default function App() {
   return (
     <ThemeProvider>
-    <AuthProvider>
-      <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-
-        <Route
-          path="/login"
-          element={
-            <GuestRoute>
-              <Login />
-            </GuestRoute>
-          }
-        />
-
-        <Route
-          path="/signup"
-          element={
-            <GuestRoute>
-              <Signup />
-            </GuestRoute>
-          }
-        />
-
-        <Route path="/account-status" element={<AccountStatus />} />
-
-        <Route
-          element={
-            <ProtectedRoute>
-              <AppLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/learners" element={<Learners />} />
-          <Route path="/learners/:learnerId" element={<LearnerProfile />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/early-warning" element={<EarlyWarning />} />
-          <Route path="/root-cause" element={<RootCause />} />
-          <Route path="/recommendations" element={<Recommendations />} />
-          <Route path="/course-insights" element={<CourseInsights />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/admin/users" element={<AdminApprovals />} />
-        </Route>
-
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </AuthProvider>
+      <AuthProvider>
+        <Routes>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
+          <Route path="/signup" element={<GuestRoute><Signup /></GuestRoute>} />
+          <Route path="/account-status" element={<AccountStatus />} />
+          <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/datasets" element={<DatasetImport />} />
+            <Route path="/learners" element={<Learners />} />
+            <Route path="/learners/:learnerId" element={<LearnerProfile />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="/early-warning" element={<EarlyWarning />} />
+            <Route path="/root-cause" element={<RootCause />} />
+            <Route path="/recommendations" element={<Recommendations />} />
+            <Route path="/course-insights" element={<CourseInsights />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/admin/users" element={<AdminApprovals />} />
+            <Route path="/master-admin" element={<MasterOnly><MasterAdminDashboard /></MasterOnly>} />
+            <Route path="/master-admin/oulad" element={<MasterOnly><OuladOverview /></MasterOnly>} />
+          </Route>
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

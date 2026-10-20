@@ -1,13 +1,14 @@
 
 """Safely import OULAD studentInfo.csv into Supabase.
 
-Default behavior is a dry run. Database writes require --apply
-and either --limit N or --all.
+Default behavior is a dry run. Database writes require --apply,
+--dataset-id for an existing owned dataset, and either --limit N or --all.
 """
 
 import argparse
 import sys
 from pathlib import Path
+from uuid import UUID
 
 import pandas as pd
 
@@ -46,7 +47,7 @@ TEXT_COLUMNS = [
 ]
 
 UPSERT_COLUMNS = [
-    "id_student",
+    "external_learner_id",
     "code_module",
     "code_presentation",
     "gender",
@@ -98,7 +99,7 @@ def normalize_disability(value):
     raise ValueError("Unexpected value in the disability column")
 
 
-def prepare_records(frame):
+def prepare_records(frame, dataset_id=None):
     missing = REQUIRED_COLUMNS - set(frame.columns)
     if missing:
         raise ValueError(
@@ -118,7 +119,7 @@ def prepare_records(frame):
             )
 
         record = {
-            "id_student": student_id,
+            "external_learner_id": student_id,
             "code_module": module,
             "code_presentation": presentation,
         }
@@ -146,7 +147,10 @@ def prepare_records(frame):
         if credits is not None and credits < 0:
             raise ValueError("Negative studied-credits value encountered")
 
-        records.append({key: record[key] for key in UPSERT_COLUMNS})
+        payload = {key: record[key] for key in UPSERT_COLUMNS if key in record}
+        if dataset_id is not None:
+            payload["dataset_id"] = str(dataset_id)
+        records.append(payload)
 
     return records
 
@@ -170,6 +174,10 @@ def main():
         action="store_true",
         help="Process all CSV rows. Requires --apply for database writes.",
     )
+    parser.add_argument(
+        "--dataset-id",
+        help="Existing owner-scoped dataset UUID for the imported learner rows.",
+    )
 
     args = parser.parse_args()
 
@@ -178,6 +186,13 @@ def main():
 
     if args.apply and args.limit is None and not args.all:
         parser.error("For safety, use --apply --limit N or --apply --all")
+    if args.apply and not args.dataset_id:
+        parser.error("--apply requires --dataset-id for an existing owned dataset")
+    if args.dataset_id:
+        try:
+            args.dataset_id = str(UUID(args.dataset_id))
+        except ValueError:
+            parser.error("--dataset-id must be a valid UUID")
 
     if not CSV_PATH.is_file():
         print(f"ERROR: CSV file not found: {CSV_PATH}")
@@ -194,12 +209,12 @@ def main():
         if args.limit is not None:
             frame = frame.head(args.limit)
 
-        records = prepare_records(frame)
+        records = prepare_records(frame, dataset_id=args.dataset_id)
 
         # Check duplicate keys within the selected input before writing.
         keys = [
             (
-                item["id_student"],
+                item["external_learner_id"],
                 item["code_module"],
                 item["code_presentation"],
             )
@@ -231,9 +246,7 @@ def main():
             batch = records[start : start + batch_size]
             supabase.table("learners").upsert(
                 batch,
-                on_conflict=(
-                    "id_student,code_module,code_presentation"
-                ),
+                on_conflict="dataset_id,external_learner_id,code_module,code_presentation",
             ).execute()
             written += len(batch)
             print(f"Upsert requests completed for {written} of {len(records)} rows.")

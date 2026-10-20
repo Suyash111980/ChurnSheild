@@ -1,2 +1,2 @@
 import { apiRequest } from "./apiClient";
-export const getDashboardSummary = () => apiRequest("/dashboard/summary");
+export const getDashboardSummary = (datasetId) => apiRequest(`/dashboard/summary?dataset_id=${encodeURIComponent(datasetId)}`);
