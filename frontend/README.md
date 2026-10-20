@@ -89,3 +89,11 @@ src/
 ```
 
 Install dependencies, start the backend and Supabase configuration, then run `npm run dev` from `frontend/`. Phase 3/4 displays live learner fields only where the current backend contract provides them; risk predictions, learner detail profiles, and dashboard aggregates remain dependent on backend endpoints and fields that are not yet implemented.
+
+## Current interaction and chart integrations
+
+- The collapsible desktop sidebar and mobile navigation drawer use the existing routes and account-role visibility. The topbar profile menu reads the authenticated Supabase user and `/auth/status` profile; its logout action uses the existing Supabase logout flow.
+- The notification drawer is UI-only and intentionally shows an empty state. There is no notification API or event stream, so notifications, unread counts, and mark-as-read actions are not simulated.
+- Global search matches application sections locally. Learner search calls the existing learner API, fetches its first 100 records, and searches those results client-side; there is no server-side search endpoint.
+- The dashboard module chart counts records in the current first 20-record API page. Risk distribution and engagement history charts remain unavailable because the learner API does not provide risk or activity fields. KPI values remain unavailable unless the dashboard summary endpoint returns supported fields.
+- Root Cause Analysis and Early Warning Center still contain explicitly labeled illustrative demo data. These examples are not connected to a trained model, prediction endpoint, or notification source.

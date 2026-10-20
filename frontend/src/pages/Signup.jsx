@@ -1,14 +1,15 @@
 
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useCallback, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Eye,
   EyeOff,
-  ShieldCheck,
   ArrowRight,
   UserPlus,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import AnimatedLogo from "../components/common/AnimatedLogo";
+import LoginIntro from "../components/common/LoginIntro";
 
 export default function Signup() {
   const [form, setForm] = useState({
@@ -22,9 +23,10 @@ export default function Signup() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showSignupIntro, setShowSignupIntro] = useState(false);
 
-  const nav = useNavigate();
   const { signup } = useAuth();
+  const completeSignupIntro = useCallback(() => setShowSignupIntro(false), []);
 
   const update = (key) => (e) =>
     { setError(""); setForm((current) => ({ ...current, [key]: e.target.value })); };
@@ -69,12 +71,12 @@ export default function Signup() {
         password: form.password,
       });
 
-      if (data.session) {
-        nav("/dashboard", { replace: true });
-      } else {
+      if (!data.session) {
         setMessage(
           "Account created. Check your email for a confirmation link before signing in."
         );
+        // Confirmation-required signup stays here; show the welcome before its confirmation message.
+        setShowSignupIntro(true);
       }
     } catch (err) {
       setError(err.message || "Unable to create your account.");
@@ -84,12 +86,11 @@ export default function Signup() {
   };
 
   return (
-    <main className="auth-page">
+    <>
+    <main className="auth-page" inert={showSignupIntro ? true : undefined} aria-hidden={showSignupIntro || undefined}>
       <section className="auth-brand-panel">
         <div className="auth-brand">
-          <div className="brand-icon">
-            <ShieldCheck size={22} />
-          </div>
+          <AnimatedLogo variant="auth" />
           <span>
             Churn<span className="brand-accent">Shield</span>
           </span>
@@ -134,9 +135,7 @@ export default function Signup() {
 
       <section className="auth-main signup-main">
         <div className="auth-mobile-brand">
-          <div className="brand-icon">
-            <ShieldCheck size={21} />
-          </div>
+          <AnimatedLogo variant="auth-mobile" />
           Churn<span className="brand-accent">Shield</span>
         </div>
 
@@ -283,5 +282,7 @@ export default function Signup() {
         </div>
       </section>
     </main>
+    {showSignupIntro && <LoginIntro size="signup" onComplete={completeSignupIntro} />}
+    </>
   );
 }
