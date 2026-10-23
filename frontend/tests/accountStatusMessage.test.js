@@ -18,6 +18,27 @@ test("other forbidden profile lookups are shown as blocked access, not an outage
   assert.equal(accountStatusMessage({ profileErrorStatus: 403, profileErrorDetail: "A valid ChurnShield profile is required." }).heading, "Account access is blocked");
 });
 
-test("non-authorization profile errors retain the retry/contact guidance", () => {
-  assert.equal(accountStatusMessage({ profileErrorStatus: 503 }).heading, "Approval status unavailable");
+test("session errors ask the user to sign in again", () => {
+  assert.equal(accountStatusMessage({ profileErrorStatus: 401 }).heading, "Your session needs to be renewed");
+});
+
+test("missing API routes are distinguished from approval decisions", () => {
+  assert.equal(accountStatusMessage({ profileErrorStatus: 404 }).heading, "Account status endpoint unavailable");
+});
+
+test("backend configuration or upstream outages are distinguished from pending approval", () => {
+  const message = accountStatusMessage({ profileErrorStatus: 503 });
+  assert.equal(message.heading, "Account service unavailable");
+  assert.match(message.description, /not an approval decision/i);
+});
+
+test("server errors are shown separately from network and CORS failures", () => {
+  assert.equal(accountStatusMessage({ profileErrorStatus: 500 }).heading, "ChurnShield service error");
+  const network = accountStatusMessage({ profileErrorStatus: null });
+  assert.equal(network.heading, "Cannot reach the account-status API");
+  assert.match(network.description, /CORS allowlist/i);
+});
+
+test("unexpected status codes do not masquerade as account approval states", () => {
+  assert.equal(accountStatusMessage({ profileErrorStatus: 418 }).heading, "Approval status could not be checked");
 });

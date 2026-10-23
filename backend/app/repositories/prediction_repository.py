@@ -101,7 +101,8 @@ def list_explanations(
 
 def list_explanations_for_predictions(
     prediction_ids: list[str],
-    dataset_id: str,
+    dataset_id: str | None,
+    dataset_ids: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Return explanations only for predictions in the selected dataset."""
     if supabase is None:
@@ -110,19 +111,24 @@ def list_explanations_for_predictions(
     if not prediction_ids:
         return []
 
-    response = (
+    query = (
         supabase.table("risk_explanations")
         .select(
             "id, prediction_id, feature_name, feature_value, contribution, created_at, "
             "predictions!inner(learners!inner(dataset_id))"
         )
         .in_("prediction_id", prediction_ids)
-        .eq("predictions.learners.dataset_id", dataset_id)
         .order("feature_name")
         # Early Warning is capped at 100 learner rows; the canonical schema
         # currently has 22 features per prediction (at most 2,200 rows).
         .limit(2500)
-        .execute()
     )
+    if dataset_ids is not None:
+        if not dataset_ids:
+            return []
+        query = query.in_("predictions.learners.dataset_id", dataset_ids)
+    elif dataset_id is not None:
+        query = query.eq("predictions.learners.dataset_id", dataset_id)
+    response = query.execute()
 
     return _ordered_explanations(response.data or [])

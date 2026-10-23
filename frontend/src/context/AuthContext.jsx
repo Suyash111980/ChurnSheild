@@ -128,7 +128,9 @@ export function AuthProvider({ children }) {
       });
       if (error) throw error;
       if (data.session) {
-        await refreshAccountProfile();
+        // Supabase signup succeeded even if the separate backend profile lookup is unavailable.
+        // Keep the session and let AccountStatus show the stored API/configuration error.
+        try { await refreshAccountProfile(); } catch { /* refreshAccountProfile stores the error state */ }
         setAuthIntroIntent("signup");
       }
       return data;
@@ -146,7 +148,9 @@ export function AuthProvider({ children }) {
         password,
       });
       if (error) throw error;
-      await refreshAccountProfile();
+      // Do not report a successful Supabase sign-in as a credential failure when only
+      // the backend's profile/status service is unavailable.
+      try { await refreshAccountProfile(); } catch { /* refreshAccountProfile stores the error state */ }
       setAuthIntroIntent("login");
       return data;
     } finally {

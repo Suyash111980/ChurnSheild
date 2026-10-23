@@ -81,7 +81,10 @@ export default function Signup() {
         setShowSignupIntro(true);
       }
     } catch (err) {
-      setError(err.message || "Unable to create your account.");
+      const message = String(err?.message || "");
+      setError(message.toLowerCase().includes("invalid api key")
+        ? "The Supabase authentication configuration is invalid. Check VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in frontend/.env.local."
+        : message || "Unable to create your account.");
     } finally {
       setLoading(false);
     }

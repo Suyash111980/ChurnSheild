@@ -93,7 +93,8 @@ def get_early_warning_page(**filters: Any) -> dict[str, Any]:
     response = learner_repository.list_early_warning(**filters)
     rows = [_with_api_source_identifier(row) for row in (response.data or [])]
 
-    dataset_id = filters["dataset_id"]
+    dataset_id = filters.get("dataset_id")
+    dataset_ids = filters.get("dataset_ids")
 
     learner_ids = [row["id"] for row in rows]
 
@@ -108,6 +109,7 @@ def get_early_warning_page(**filters: Any) -> dict[str, Any]:
         for row in learner_repository.get_latest_feature_snapshots(
             learner_ids,
             dataset_id,
+            dataset_ids,
         )
     }
 
@@ -116,6 +118,7 @@ def get_early_warning_page(**filters: Any) -> dict[str, Any]:
         for row in learner_repository.get_latest_recommendations(
             learner_ids,
             dataset_id,
+            dataset_ids,
         )
     }
 
@@ -124,6 +127,7 @@ def get_early_warning_page(**filters: Any) -> dict[str, Any]:
     explanations = prediction_repository.list_explanations_for_predictions(
         [str(value) for value in prediction_ids],
         dataset_id,
+        dataset_ids,
     )
 
     for explanation in explanations:

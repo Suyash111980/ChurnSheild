@@ -5,14 +5,13 @@ from uuid import uuid4
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ec
-from fastapi import Depends, HTTPException
+from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.testclient import TestClient
 from jwt.exceptions import PyJWKClientConnectionError
 
 from app.api.dependencies import auth
-from app.api.dependencies.datasets import require_owned_dataset
-from app.repositories import learner_repository
+from app.repositories import dataset_repository, learner_repository
 from app.repositories import dataset_repository
 from app.core.config import settings
 from app.main import app
@@ -247,11 +246,21 @@ def test_admin_can_access_learners_over_http(auth_setup, monkeypatch):
         {"id": SUBJECT, "role": "admin", "approval_status": "approved"}
     ]
     monkeypatch.setattr(learner_repository, "supabase", FakeLearnerQuery())
-
-    def owned_dataset(_user=Depends(auth.get_current_user)):
-        return {"id": DATASET_ID, "owner_id": SUBJECT, "status": "processed"}
-
-    app.dependency_overrides[require_owned_dataset] = owned_dataset
+    monkeypatch.setattr(
+        dataset_repository,
+        "get_workspace_for_admin",
+        lambda _owner_id: {"id": "workspace-1", "status": "active"},
+    )
+    monkeypatch.setattr(
+        dataset_repository,
+        "get_owned_dataset",
+        lambda _dataset_id, _owner_id, _workspace_id: {
+            "id": DATASET_ID,
+            "owner_id": SUBJECT,
+            "workspace_id": "workspace-1",
+            "status": "processed",
+        },
+    )
 
     response = TestClient(app).get(
         f"/api/v1/learners?dataset_id={DATASET_ID}",

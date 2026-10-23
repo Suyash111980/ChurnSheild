@@ -153,6 +153,42 @@ def _json_value(value: Any) -> Any:
     return value
 
 
+def _column_quality(frame: pd.DataFrame) -> tuple[dict[str, int], dict[str, str]]:
+    """Summarize uploaded columns without ambiguous lookup for duplicate headers."""
+    missing: dict[str, int] = {}
+    data_types: dict[str, str] = {}
+    seen: dict[str, int] = {}
+    for index, raw_name in enumerate(frame.columns):
+        name = str(raw_name)
+        seen[name] = seen.get(name, 0) + 1
+        key = name if seen[name] == 1 else f"{name} (duplicate {seen[name]})"
+        values = frame.iloc[:, index]
+        missing[key] = int(
+            (values.isna() | values.astype("string").str.strip().eq("").fillna(False)).sum()
+        )
+        populated = values.astype("string").str.strip()
+        populated = populated[populated.notna() & populated.ne("")]
+        if name in NUMERIC_FEATURES:
+            detected_type = "number"
+        elif name == "id_student":
+            detected_type = "identifier"
+        elif name in {"code_module", "code_presentation", "gender", "region", "highest_education", "imd_band", "age_band", "disability"}:
+            detected_type = "category"
+        elif name == "target_withdrawn":
+            detected_type = "label"
+        elif populated.empty:
+            detected_type = "empty"
+        else:
+            numeric = pd.to_numeric(populated, errors="coerce")
+            detected_type = (
+                "number" if numeric.notna().all()
+                else "text" if numeric.isna().all()
+                else "mixed"
+            )
+        data_types[key] = detected_type
+    return missing, data_types
+
+
 def parse_dataset(filename: str, content: bytes) -> ParsedDataset:
     """Parse bounded file content and produce actionable validation metadata."""
     safe_name = Path(filename or "").name
@@ -177,12 +213,22 @@ def parse_dataset(filename: str, content: bytes) -> ParsedDataset:
     if len(frame.columns) != len(set(frame.columns)):
         issues.append({"code": "duplicate_columns", "message": "Column names must be unique"})
     if any(not column for column in frame.columns) or len(frame.columns) != len(set(frame.columns)):
+        missing_value_counts, data_types = _column_quality(frame)
         return ParsedDataset(
             frame=frame,
             report={
                 "row_count": int(len(frame)),
+                "rows_received": int(len(frame)),
+                "rows_retained": 0,
+                "rows_rejected": int(len(frame)),
+                "rows_skipped": 0,
+                "rows_with_recoverable_missing_values": 0,
+                "rows_cleaned_by_model_pipeline": 0,
                 "column_count": int(len(frame.columns)),
                 "columns": list(frame.columns),
+                "missing_value_counts": missing_value_counts,
+                "data_types": data_types,
+                "invalid_values": [],
                 "required_columns": list(REQUIRED_KEYS),
                 "missing_prediction_columns": list(FEATURE_COLUMNS),
                 "descriptive_compatible": False,
@@ -264,12 +310,39 @@ def parse_dataset(filename: str, content: bytes) -> ParsedDataset:
     if "target_withdrawn" in frame.columns:
         warnings.append({"code": "target_column_ignored", "column": "target_withdrawn",
                          "message": "Outcome labels are retained for audit only and never passed to inference"})
+    missing_value_counts, data_types = _column_quality(frame)
+    if any(missing_value_counts.values()):
+        warnings.append({
+            "code": "missing_values_detected",
+            "columns": {column: count for column, count in missing_value_counts.items() if count},
+            "message": "Missing feature values will be handled only by the model's saved training-fitted preprocessing pipeline; missing identifiers are errors.",
+        })
+    rows_with_recoverable_missing_values = 0
+    if prediction:
+        feature_missing = frame[FEATURE_COLUMNS].isna()
+        for column in FEATURE_COLUMNS:
+            feature_missing[column] |= (
+                frame[column].astype("string").str.strip().eq("").fillna(False)
+            )
+        rows_with_recoverable_missing_values = int(feature_missing.any(axis=1).sum())
     return ParsedDataset(
         frame=frame,
         report={
             "row_count": int(len(frame)),
+            "rows_received": int(len(frame)),
+            "rows_retained": int(len(frame)) if descriptive and not issues else 0,
+            "rows_rejected": 0 if descriptive and not issues else int(len(frame)),
+            "rows_skipped": 0,
+            "rows_with_recoverable_missing_values": rows_with_recoverable_missing_values,
+            "rows_cleaned_by_model_pipeline": 0,
             "column_count": int(len(frame.columns)),
             "columns": list(frame.columns),
+            "missing_value_counts": missing_value_counts,
+            "data_types": data_types,
+            "invalid_values": [
+                {key: value for key, value in issue.items() if key in {"code", "column", "count", "message"}}
+                for issue in issues
+            ],
             "required_columns": list(REQUIRED_KEYS),
             "missing_prediction_columns": missing_features,
             "descriptive_compatible": descriptive and not issues,

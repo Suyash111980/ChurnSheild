@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
+import logging
 import math
 from numbers import Real
 from pathlib import Path
@@ -27,6 +29,7 @@ FEATURE_COLUMNS = feature_columns()
 BATCH_SIZE = 250
 MAX_PREDICTION_ROWS = 10_000
 EVIDENCE_BATCH_SIZE = 10
+logger = logging.getLogger(__name__)
 LEARNER_FIELDS = (
     "gender", "region", "highest_education", "imd_band", "age_band",
     "num_of_prev_attempts", "studied_credits", "disability",
@@ -52,6 +55,16 @@ def _source_key(row: dict) -> tuple[str, str, str]:
         str(row["code_module"]).strip(),
         str(row["code_presentation"]).strip(),
     )
+
+
+def _source_keys(frame: pd.DataFrame) -> set[tuple[str, str, str]]:
+    return {_source_key(row) for row in frame.to_dict(orient="records")}
+
+
+def _source_fingerprint(frame: pd.DataFrame) -> str:
+    """Hash normalized parsed content so replacements cannot expose stale rows."""
+    serialized = frame.to_csv(index=False, header=True, na_rep="<NA>", lineterminator="\n")
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def _learner_payload(row: dict, dataset_id: str) -> dict:
@@ -363,7 +376,10 @@ def _process_parsed_dataset(
     *, dataset_id: str, owner_id: str, workspace_id: str, parsed: ParsedDataset, initial_record: dict
 ) -> dict:
     report = dict(parsed.report)
+    report["source_fingerprint"] = _source_fingerprint(parsed.frame)
     if report["errors"] or not report["descriptive_compatible"]:
+        report["processing_state"] = "validation_failed"
+        report["failed_stage"] = "validation"
         failed = _record_failure(
             dataset_id,
             owner_id,
@@ -395,6 +411,8 @@ def _process_parsed_dataset(
     key_to_learner: dict[tuple[str, str, str], str] = {}
     report["prediction_state"] = "not_started"
     report["predictions_persisted"] = 0
+    report["processing_state"] = "processing"
+    processing_stage = "learner_persistence"
     try:
         chunks = [records[index:index + BATCH_SIZE] for index in range(0, len(records), BATCH_SIZE)]
         for batch_index, batch in enumerate(chunks):
@@ -416,6 +434,7 @@ def _process_parsed_dataset(
         if len(key_to_learner) != len(records):
             raise RuntimeError("learner_mapping_incomplete")
 
+        processing_stage = "feature_persistence"
         as_of_date = datetime.now(timezone.utc).date().isoformat()
         for batch_index in range(0, len(records), BATCH_SIZE):
             feature_rows = []
@@ -433,6 +452,7 @@ def _process_parsed_dataset(
         if report["prediction_compatible"] and len(records) <= MAX_PREDICTION_ROWS:
             prediction_state = "running"
             report["prediction_state"] = prediction_state
+            processing_stage = "preprocessing_and_inference"
             try:
                 feature_records = [
                     {column: _safe_value(row.get(column)) for column in FEATURE_COLUMNS}
@@ -440,11 +460,28 @@ def _process_parsed_dataset(
                 ]
                 ordered_ids = [key_to_learner[_source_key(row)] for row in records]
                 inference_results = predict_records(feature_records, record_ids=ordered_ids)
-            except (ModelArtifactError, ModelFeatureError):
+            except ModelArtifactError as exc:
                 # A missing artifact is a declared unavailable inference state;
                 # learner and feature processing can still complete descriptively.
                 prediction_state = "unavailable"
+                report["processing_state"] = "prediction_unavailable"
+                report["prediction_error_code"] = "model_unavailable"
+                report["prediction_message"] = (
+                    "Learners were saved, but predictions could not run because the approved model is unavailable. "
+                    "Check the configured model artifact and approved model version."
+                )
+                logger.warning("Dataset inference unavailable (reason=%s)", type(exc).__name__)
+            except ModelFeatureError as exc:
+                prediction_state = "unavailable"
+                report["processing_state"] = "prediction_unavailable"
+                report["prediction_error_code"] = "model_preprocessing_or_feature_contract_failed"
+                report["prediction_message"] = (
+                    "Learners were saved, but the model could not prepare these features for inference. "
+                    "Review the validation details and confirm that the approved artifact matches this feature schema."
+                )
+                logger.warning("Dataset inference rejected by feature contract (reason=%s)", type(exc).__name__)
             else:
+                processing_stage = "prediction_persistence"
                 prediction_rows = [
                     {
                         "learner_id": prediction["record_id"],
@@ -469,12 +506,32 @@ def _process_parsed_dataset(
                     raise RuntimeError("prediction_rows_not_returned")
                 prediction_count = len(saved_predictions)
                 prediction_state = "available"
+                report["processing_state"] = "predictions_completed"
         elif report["prediction_compatible"]:
             prediction_state = "row_limit_exceeded"
+            report["processing_state"] = "row_limit_exceeded"
+            report["prediction_error_code"] = "prediction_row_limit_exceeded"
+            report["prediction_message"] = (
+                f"This dataset has {len(records):,} rows, above the configured prediction limit of "
+                f"{MAX_PREDICTION_ROWS:,}. No predictions were run."
+            )
+        else:
+            report["processing_state"] = "descriptive_only"
+            missing = report.get("missing_prediction_columns") or []
+            report["prediction_error_code"] = "required_features_missing"
+            report["prediction_message"] = (
+                "Learner records were saved for descriptive use, but predictions were not run because "
+                "required model features are missing: " + ", ".join(missing)
+            )
 
         report["prediction_state"] = prediction_state
         report["predictions_persisted"] = prediction_count
+        report["prediction_rows_skipped"] = len(records) - prediction_count
         if prediction_state == "available":
+            report["rows_cleaned_by_model_pipeline"] = report.get(
+                "rows_with_recoverable_missing_values", 0
+            )
+            processing_stage = "explanation_and_recommendation_generation"
             evidence = _persist_prediction_evidence(
                 dataset_id=dataset_id,
                 feature_records=feature_records,
@@ -490,6 +547,11 @@ def _process_parsed_dataset(
                 "recommendations_persisted": 0,
             }
         report.update(evidence)
+        if prediction_state == "available" and (
+            evidence.get("explanations_state") in {"partial", "unavailable"}
+            or evidence.get("recommendations_state") in {"partial", "unavailable"}
+        ):
+            report["processing_state"] = "predictions_completed_with_evidence_issues"
         record = dataset_repository.update_owned_dataset(
             dataset_id,
             owner_id,
@@ -509,10 +571,17 @@ def _process_parsed_dataset(
         return {"data": record, "validation": report}
     except Exception as exc:
         report["processing_state"] = "failed"
+        report["failed_stage"] = processing_stage
         if report.get("prediction_state") == "running":
             report["prediction_state"] = "failed"
+            report["prediction_error_code"] = (
+                "prediction_persistence_failed"
+                if processing_stage == "prediction_persistence"
+                else "prediction_inference_failed"
+            )
             report["prediction_error"] = (
-                "Inference or prediction persistence did not complete; no result was confirmed."
+                "Inference or prediction persistence did not complete; no result was confirmed. "
+                "Review the reported failure stage and retry processing."
             )
         try:
             record = _record_failure(
@@ -531,6 +600,7 @@ def upload_dataset(
     *, owner_id: str, workspace_id: str, filename: str, dataset_name: str, content: bytes,
     dataset_id: str | None = None, allow_reprocess: bool = False,
 ) -> dict:
+    existing_record = None
     if dataset_id is None:
         initial_record = dataset_repository.create_dataset(
             _metadata_payload(owner_id, workspace_id, dataset_name, filename, len(content))
@@ -542,27 +612,20 @@ def upload_dataset(
         initial_record = get_owned_dataset(dataset_id, owner_id, workspace_id)
         if initial_record is None:
             return {"data": None, "validation": None}
+        existing_record = initial_record
         allowed_statuses = {"failed"}
         if allow_reprocess:
             allowed_statuses.add("processed")
         if initial_record.get("status") not in allowed_statuses:
             raise ValueError("dataset_not_retryable")
-        _update_dataset(
-            dataset_id,
-            owner_id, workspace_id,
-            {
-                "filename": Path(filename or "dataset.csv").name[:255],
-                "file_size_bytes": len(content),
-                "status": "uploaded",
-                "processing_progress": 0,
-                "error_summary": None,
-                "updated_at": _utc_now(),
-            },
-        )
 
     try:
         parsed = parse_dataset(filename, content)
     except DatasetUploadError as exc:
+        if existing_record is not None:
+            # Keep the previous processed revision available when a replacement
+            # file is malformed; never hide valid saved results on a bad retry.
+            raise ValueError("The replacement file failed validation; the existing dataset was preserved.") from exc
         report = {
             "errors": [{"code": "file_validation_failed", "message": str(exc)}],
             "warnings": [],
@@ -575,6 +638,8 @@ def upload_dataset(
             "Upload validation failed. Review the file format and size, then retry.",
         ), "validation": report}
     except Exception:
+        if existing_record is not None:
+            raise ValueError("The replacement file could not be validated; the existing dataset was preserved.")
         report = {
             "errors": [{"code": "file_validation_failed", "message": "File validation could not be completed"}],
             "warnings": [],
@@ -587,10 +652,65 @@ def upload_dataset(
             "Upload validation failed. Review the file format and size, then retry.",
         ), "validation": report}
 
-    return _process_parsed_dataset(
+    source_fingerprint = _source_fingerprint(parsed.frame)
+    if existing_record is not None:
+        previous_report = existing_record.get("validation_results") or {}
+        previous_fingerprint = previous_report.get("source_fingerprint")
+        if previous_fingerprint != source_fingerprint:
+            # Enrichment can be safely applied in place only when the complete
+            # learner-course membership is identical. Any membership change
+            # gets a new dataset revision because this schema has no upload-run
+            # key with which to distinguish stale rows.
+            previous_keys = dataset_repository.get_dataset_source_keys(dataset_id)
+            incoming_keys = _source_keys(parsed.frame)
+            if previous_keys == incoming_keys:
+                created_revision = False
+                _update_dataset(
+                    dataset_id,
+                    owner_id, workspace_id,
+                    {
+                        "filename": Path(filename or "dataset.csv").name[:255],
+                        "file_size_bytes": len(content),
+                        "status": "uploaded",
+                        "processing_progress": 0,
+                        "error_summary": None,
+                        "updated_at": _utc_now(),
+                    },
+                )
+            else:
+                base_name = str(existing_record.get("dataset_name") or "Uploaded dataset")
+                revised_name = f"{base_name[:110]} (updated)"
+                initial_record = dataset_repository.create_dataset(
+                    _metadata_payload(owner_id, workspace_id, revised_name, filename, len(content))
+                )
+                if initial_record is None:
+                    raise RuntimeError("database_unavailable")
+                dataset_id = str(initial_record["id"])
+                created_revision = True
+        else:
+            created_revision = False
+            _update_dataset(
+                dataset_id,
+                owner_id, workspace_id,
+                {
+                    "filename": Path(filename or "dataset.csv").name[:255],
+                    "file_size_bytes": len(content),
+                    "status": "uploaded",
+                    "processing_progress": 0,
+                    "error_summary": None,
+                    "updated_at": _utc_now(),
+                },
+            )
+    else:
+        created_revision = False
+
+    result = _process_parsed_dataset(
         dataset_id=dataset_id,
         owner_id=owner_id,
         workspace_id=workspace_id,
         parsed=parsed,
         initial_record=initial_record,
     )
+    if created_revision and result.get("validation") is not None:
+        result["validation"]["source_revision_created"] = True
+    return result

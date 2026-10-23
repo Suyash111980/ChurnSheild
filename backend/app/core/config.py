@@ -9,9 +9,9 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 class Settings(BaseSettings):
     app_env: str = "development"
-    cors_origins: str = "http://localhost:5173"
-    supabase_url: str = ""
-    supabase_publishable_key: str = ""
+    cors_origins: str = "http://localhost:5173,http://localhost:5174"
+    supabase_url: str = "https://ilqiatthvjkgfajwlaoa.supabase.co/rest/v1/"
+    supabase_publishable_key: str = "sb_publishable_pkDmjrmnotgQ4W7mjSkgoQ_GO9sNa0c"
     supabase_secret_key: str = ""
     supabase_jwt_issuer: str = ""
     supabase_jwt_algorithm: str = "ES256"

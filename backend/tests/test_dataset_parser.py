@@ -10,6 +10,7 @@ from app.utils.dataset_parser import (
     DatasetUploadError,
     parse_dataset,
 )
+from app.utils import dataset_parser
 
 
 def canonical_rows():
@@ -65,6 +66,32 @@ def test_duplicate_source_key_and_invalid_numeric_values_are_reported():
     assert parsed.report["prediction_compatible"] is False
 
 
+def test_preview_reports_missing_values_types_and_recoverable_numeric_missingness():
+    rows = canonical_rows()
+    rows[0]["vle_total_clicks_by_cutoff"] = ""
+    parsed = parse_dataset("cohort.csv", csv_bytes(rows))
+
+    assert parsed.report["prediction_compatible"] is True
+    assert parsed.report["missing_value_counts"]["vle_total_clicks_by_cutoff"] == 1
+    assert parsed.report["data_types"]["vle_total_clicks_by_cutoff"] == "number"
+    assert parsed.report["rows_received"] == 2
+    assert parsed.report["rows_retained"] == 2
+    assert parsed.report["rows_rejected"] == 0
+    assert parsed.report["rows_with_recoverable_missing_values"] == 1
+    assert any(item["code"] == "missing_values_detected" for item in parsed.report["warnings"])
+
+
+def test_extra_columns_are_reported_but_do_not_block_prediction():
+    rows = canonical_rows()
+    for row in rows:
+        row["note_from_admin"] = "review"
+    parsed = parse_dataset("cohort.csv", csv_bytes(rows))
+
+    assert parsed.report["prediction_compatible"] is True
+    warning = next(item for item in parsed.report["warnings"] if item["code"] == "unexpected_columns")
+    assert warning["columns"] == ["note_from_admin"]
+
+
 def test_xlsx_content_is_read_without_extracting_files(tmp_path):
     workbook = Workbook()
     sheet = workbook.active
@@ -97,6 +124,26 @@ def test_upload_size_limit_is_enforced():
     with pytest.raises(DatasetUploadError) as error:
         parse_dataset("cohort.csv", b"x" * (MAX_UPLOAD_BYTES + 1))
     assert error.value.status_code == 413
+
+
+@pytest.mark.parametrize("content", [b"", b"id_student,code_module,code_presentation\n"])
+def test_empty_uploads_are_rejected_or_reported_without_fabricating_rows(content):
+    if not content:
+        with pytest.raises(DatasetUploadError, match="empty"):
+            parse_dataset("empty.csv", content)
+        return
+    parsed = parse_dataset("header-only.csv", content)
+    assert parsed.frame.empty
+    assert parsed.report["rows_received"] == 0
+    assert parsed.report["descriptive_compatible"] is False
+    assert any(issue["code"] == "no_rows" for issue in parsed.report["errors"])
+
+
+def test_csv_row_limit_is_enforced(monkeypatch):
+    monkeypatch.setattr(dataset_parser, "MAX_ROWS", 1)
+    rows = canonical_rows()
+    with pytest.raises(DatasetUploadError, match="row limit"):
+        parse_dataset("too-many.csv", csv_bytes(rows))
 
 
 def test_missing_required_keys_return_actionable_errors():

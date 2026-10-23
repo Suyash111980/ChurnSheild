@@ -12,6 +12,7 @@ class RecommendationPage(BaseModel):
     count: int
     total: int
     has_more: bool
+    status_counts: dict[Literal["pending", "in_progress", "completed", "dismissed"], int]
 
 
 class RecommendationStatusUpdate(BaseModel):

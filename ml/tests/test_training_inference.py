@@ -111,6 +111,22 @@ def test_training_persists_pipeline_metadata_and_fresh_inference_contract(tmp_pa
     assert fresh_result == {"count": 2, "version": metadata["model_version"], "valid": True}
 
 
+def test_saved_training_preprocessor_handles_missing_categorical_and_numeric_values(tmp_path):
+    data = _training_rows()
+    artifact = tmp_path / "model-with-imputation.joblib"
+    train_baseline(data, artifact_path=artifact, seed=42)
+
+    row = data.loc[0, FEATURE_COLUMNS].to_dict()
+    row[CATEGORICAL_FEATURES[0]] = None
+    row[CATEGORICAL_FEATURES[1]] = ""
+    row[NUMERIC_FEATURES[0]] = float("nan")
+    result = predict_records([row], record_ids=["missing-values"], artifact_path=artifact)
+
+    assert len(result) == 1
+    assert result[0]["record_id"] == "missing-values"
+    assert 0 <= result[0]["risk_probability"] <= 1
+
+
 def test_inference_rejects_missing_or_incompatible_features(tmp_path):
     with pytest.raises(InferenceContractError, match="missing or unreadable"):
         load_inference_artifact(tmp_path / "missing.joblib")

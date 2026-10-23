@@ -180,6 +180,9 @@ def test_approval_gate_failure_reports_unavailable_and_writes_no_prediction(monk
 
     assert result["data"]["status"] == "processed"
     assert result["validation"]["prediction_state"] == "unavailable"
+    assert result["validation"]["processing_state"] == "prediction_unavailable"
+    assert result["validation"]["prediction_error_code"] == "model_unavailable"
+    assert result["validation"]["prediction_message"]
     assert result["validation"]["predictions_persisted"] == 0
     assert store.rows == {}
 
@@ -205,6 +208,7 @@ def test_inference_runtime_failure_is_reported_as_failed_not_not_started(monkeyp
     assert result["data"]["status"] == "failed"
     assert result["validation"]["processing_state"] == "failed"
     assert result["validation"]["prediction_state"] == "failed"
+    assert result["validation"]["failed_stage"] == "preprocessing_and_inference"
     assert "did not complete" in result["validation"]["prediction_error"]
     assert result["validation"]["predictions_persisted"] == 0
     assert store.rows == {}
@@ -311,4 +315,54 @@ def test_missing_features_are_not_sent_to_inference(monkeypatch):
     )
 
     assert result["validation"]["prediction_state"] == "dataset_incompatible"
+    assert result["validation"]["processing_state"] == "descriptive_only"
+    assert result["validation"]["prediction_error_code"] == "required_features_missing"
+    assert "vle_total_clicks_by_cutoff" in result["validation"]["prediction_message"]
     assert calls == []
+
+
+def test_3000_row_descriptive_dataset_is_saved_without_fabricated_predictions(monkeypatch):
+    output = io.StringIO(newline="")
+    fields = ["id_student", "code_module", "code_presentation", "num_of_prev_attempts", "studied_credits", "TotalClicks"]
+    writer = csv.DictWriter(output, fieldnames=fields)
+    writer.writeheader()
+    for index in range(3000):
+        writer.writerow({
+            "id_student": f"synthetic-{index:04d}", "code_module": "AAA",
+            "code_presentation": "2014J", "num_of_prev_attempts": 0,
+            "studied_credits": 60, "TotalClicks": index,
+        })
+    parsed = parse_dataset("synthetic-descriptive.csv", output.getvalue().encode())
+    assert parsed.report["row_count"] == 3000
+    assert parsed.report["prediction_compatible"] is False
+
+    updates = []
+    prediction_calls = []
+    monkeypatch.setattr(
+        dataset_repository, "upsert_learners",
+        lambda records: [
+            {
+                "id": f"learner-{record['external_learner_id']}", "dataset_id": DATASET_ID,
+                "external_learner_id": record["external_learner_id"],
+                "code_module": record["code_module"], "code_presentation": record["code_presentation"],
+            }
+            for record in records
+        ],
+    )
+    monkeypatch.setattr(dataset_repository, "upsert_features", lambda _records: None)
+    monkeypatch.setattr(dataset_repository, "update_owned_dataset", lambda *args: (
+        updates.append(args[-1]) or {"id": DATASET_ID, "status": args[-1].get("status", "processing")}
+    ))
+    monkeypatch.setattr(dataset_service, "predict_records", lambda *args, **kwargs: prediction_calls.append(args))
+
+    result = dataset_service._process_parsed_dataset(
+        dataset_id=DATASET_ID, owner_id=OWNER_ID, workspace_id=WORKSPACE_ID,
+        parsed=parsed, initial_record={"id": DATASET_ID},
+    )
+
+    assert result["data"]["status"] == "processed"
+    assert result["validation"]["prediction_state"] == "dataset_incompatible"
+    assert result["validation"]["prediction_error_code"] == "required_features_missing"
+    assert result["validation"]["predictions_persisted"] == 0
+    assert prediction_calls == []
+    assert updates[-1]["row_count"] == 3000

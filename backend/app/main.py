@@ -14,6 +14,7 @@ from app.api.routes.recommendations import router as recommendations_router
 from app.api.routes.early_warning import router as early_warning_router
 from app.api.routes.datasets import router as datasets_router
 from app.api.routes.dashboard import router as dashboard_router
+from app.api.routes.courses import router as courses_router
 from app.api.routes.analytics import router as analytics_router
 from app.api.routes.reports import router as reports_router
 from app.api.routes.master_admin import router as master_admin_router
@@ -45,6 +46,7 @@ app.include_router(recommendations_router)
 app.include_router(early_warning_router)
 app.include_router(datasets_router)
 app.include_router(dashboard_router)
+app.include_router(courses_router)
 app.include_router(analytics_router)
 app.include_router(reports_router)
 app.include_router(master_admin_router)

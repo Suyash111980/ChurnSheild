@@ -5,9 +5,9 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.dependencies.datasets import require_processed_dataset
+from app.api.dependencies.datasets import require_admin_workspace, require_processed_dataset
 from app.main import app
-from app.repositories import learner_repository, prediction_repository
+from app.repositories import dataset_repository, learner_repository, prediction_repository
 
 
 LEARNER_ID = str(uuid4())
@@ -16,6 +16,10 @@ DATASET_ID = str(uuid4())
 
 def allow_dataset():
     return {"id": DATASET_ID, "owner_id": str(uuid4()), "status": "processed"}
+
+
+def allow_workspace():
+    return {"id": str(uuid4()), "workspace_id": "workspace-test"}
 
 
 class FakeQuery:
@@ -39,8 +43,12 @@ class FakeQuery:
         self.filters.append((field, values))
         return self
 
-    def order(self, field, desc=False):
+    def order(self, field, desc=False, **kwargs):
         self.orders.append((field, desc))
+        return self
+
+    def or_(self, expression):
+        self.filters.append(("or", expression))
         return self
 
     def range(self, first, last):
@@ -110,7 +118,9 @@ def test_admin_can_list_paginated_learners(monkeypatch):
         counts={"learners_latest_prediction": 17},
     )
     monkeypatch.setattr(learner_repository, "supabase", fake_db)
-    app.dependency_overrides[require_processed_dataset] = allow_dataset
+    monkeypatch.setattr(dataset_repository, "supabase", fake_db)
+    monkeypatch.setattr(dataset_repository, "get_owned_dataset", lambda *_args: allow_dataset())
+    app.dependency_overrides[require_admin_workspace] = allow_workspace
 
     response = TestClient(app).get(
         f"/api/v1/learners?dataset_id={DATASET_ID}&limit=10&offset=5"
@@ -145,7 +155,9 @@ def test_admin_can_list_paginated_learners(monkeypatch):
 def test_learner_filters_are_database_side(monkeypatch):
     fake_db = FakeSupabase()
     monkeypatch.setattr(learner_repository, "supabase", fake_db)
-    app.dependency_overrides[require_processed_dataset] = allow_dataset
+    monkeypatch.setattr(dataset_repository, "supabase", fake_db)
+    monkeypatch.setattr(dataset_repository, "get_owned_dataset", lambda *_args: allow_dataset())
+    app.dependency_overrides[require_admin_workspace] = allow_workspace
 
     response = TestClient(app).get(
         f"/api/v1/learners?dataset_id={DATASET_ID}"
@@ -164,7 +176,7 @@ def test_learner_filters_are_database_side(monkeypatch):
 
 
 def test_invalid_pagination_and_risk_filter_are_rejected():
-    app.dependency_overrides[require_processed_dataset] = allow_dataset
+    app.dependency_overrides[require_admin_workspace] = allow_workspace
     client = TestClient(app)
 
     for query in (
@@ -252,7 +264,9 @@ def test_invalid_and_missing_learner_ids(monkeypatch):
 
 def test_missing_database_returns_503(monkeypatch):
     monkeypatch.setattr(learner_repository, "supabase", None)
-    app.dependency_overrides[require_processed_dataset] = allow_dataset
+    monkeypatch.setattr(dataset_repository, "supabase", FakeSupabase())
+    monkeypatch.setattr(dataset_repository, "get_owned_dataset", lambda *_args: allow_dataset())
+    app.dependency_overrides[require_admin_workspace] = allow_workspace
 
     response = TestClient(app).get(
         f"/api/v1/learners?dataset_id={DATASET_ID}"
@@ -266,7 +280,9 @@ def test_database_failure_is_generic(monkeypatch):
             raise RuntimeError("private database detail")
 
     monkeypatch.setattr(learner_repository, "supabase", BrokenDatabase())
-    app.dependency_overrides[require_processed_dataset] = allow_dataset
+    monkeypatch.setattr(dataset_repository, "supabase", BrokenDatabase())
+    monkeypatch.setattr(dataset_repository, "get_owned_dataset", lambda *_args: allow_dataset())
+    app.dependency_overrides[require_admin_workspace] = allow_workspace
 
     response = TestClient(app).get(
         f"/api/v1/learners?dataset_id={DATASET_ID}"

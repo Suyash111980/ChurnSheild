@@ -12,8 +12,19 @@ logger = logging.getLogger(__name__)
 @lru_cache
 def get_supabase_client() -> Client | None:
     """Create a server-side Supabase client when credentials are configured."""
-    if not settings.supabase_url or not settings.supabase_secret_key:
-        logger.error("Supabase client is unavailable: required server configuration is missing")
+    missing_settings = [
+        name
+        for name, value in (
+            ("SUPABASE_URL", settings.supabase_url),
+            ("SUPABASE_SECRET_KEY", settings.supabase_secret_key),
+        )
+        if not value.strip()
+    ]
+    if missing_settings:
+        logger.error(
+            "Supabase client is unavailable; missing backend settings: %s",
+            ", ".join(missing_settings),
+        )
         return None
 
     try:

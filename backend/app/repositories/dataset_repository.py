@@ -80,6 +80,40 @@ def list_owned_datasets(*, owner_id: str, workspace_id: str, limit: int, offset:
     )
 
 
+def list_all_owned_datasets(*, owner_id: str, workspace_id: str) -> list[dict]:
+    """Read all datasets in one already-verified workspace, using bounded pages."""
+    rows: list[dict] = []
+    offset = 0
+    page_size = 100
+    while True:
+        response = list_owned_datasets(
+            owner_id=owner_id, workspace_id=workspace_id, limit=page_size, offset=offset
+        )
+        batch = response.data or []
+        rows.extend(batch)
+        if len(batch) < page_size:
+            return rows
+        offset += page_size
+
+
+def get_dashboard_summaries(dataset_ids: list[str]) -> list[dict]:
+    if not dataset_ids:
+        return []
+    rows = []
+    for offset in range(0, len(dataset_ids), 100):
+        response = (
+            _client().table("dataset_dashboard_summary")
+            .select(
+                "dataset_id,total_learner_records,course_presentation_count,learners_with_prediction,"
+                "low_risk_count,medium_risk_count,high_risk_count"
+            )
+            .in_("dataset_id", dataset_ids[offset:offset + 100])
+            .execute()
+        )
+        rows.extend(response.data or [])
+    return rows
+
+
 def update_owned_dataset(dataset_id: str, owner_id: str, workspace_id: str, updates: dict):
     response = (
         _client().table("dataset_uploads")
@@ -88,6 +122,30 @@ def update_owned_dataset(dataset_id: str, owner_id: str, workspace_id: str, upda
         .eq("owner_id", owner_id)
         .eq("workspace_id", workspace_id)
         .select(DATASET_COLUMNS)
+        .execute()
+    )
+    rows = response.data or []
+    return rows[0] if rows else None
+
+
+def delete_owned_dataset(dataset_id: str, owner_id: str, workspace_id: str, access_token: str):
+    """Delete through the authenticated user's JWT so dataset RLS remains active."""
+    from supabase import create_client
+
+    from app.core.config import settings
+
+    if not settings.supabase_url.strip() or not settings.supabase_publishable_key.strip():
+        raise RuntimeError("database_unavailable")
+    client = create_client(settings.supabase_url, settings.supabase_publishable_key)
+    client.postgrest.auth(access_token)
+    response = (
+        client.table("dataset_uploads")
+        .delete()
+        .eq("id", dataset_id)
+        .eq("owner_id", owner_id)
+        .eq("workspace_id", workspace_id)
+        .neq("status", "processing")
+        .select("id")
         .execute()
     )
     rows = response.data or []
@@ -107,6 +165,39 @@ def upsert_learners(records: list[dict]) -> list[dict]:
         .execute()
     )
     return response.data or []
+
+
+def get_dataset_source_keys(dataset_id: str) -> set[tuple[str, str, str]]:
+    """Read source learner-course keys for safe in-place dataset enrichment."""
+    keys: set[tuple[str, str, str]] = set()
+    row_count = 0
+    offset = 0
+    page_size = 500
+    while True:
+        response = (
+            _client().table("learners")
+            .select("external_learner_id,code_module,code_presentation")
+            .eq("dataset_id", dataset_id)
+            .range(offset, offset + page_size - 1)
+            .execute()
+        )
+        rows = response.data or []
+        row_count += len(rows)
+        for row in rows:
+            source_id = row.get("external_learner_id")
+            module = row.get("code_module")
+            presentation = row.get("code_presentation")
+            if source_id is None or module is None or presentation is None:
+                raise RuntimeError("dataset_source_keys_incomplete")
+            key = (str(source_id).strip(), str(module).strip(), str(presentation).strip())
+            if key in keys:
+                raise RuntimeError("dataset_source_keys_duplicate")
+            keys.add(key)
+        if len(rows) < page_size:
+            if row_count != len(keys):
+                raise RuntimeError("dataset_source_keys_incomplete")
+            return keys
+        offset += page_size
 
 
 def upsert_features(records: list[dict]) -> None:
