@@ -56,7 +56,13 @@ def validate_feature_frame(
             raise FeatureContractError(f"Numeric feature {column} contains non-finite values")
         result[column] = converted
     for column in CATEGORICAL_FEATURES:
-        result[column] = result[column].astype("string")
+        # Keep missing categorical values as NumPy NaN. The training-fitted
+        # SimpleImputer in the saved pipeline expects a conventional missing
+        # marker; pandas.NA raises ``boolean value of NA is ambiguous`` inside
+        # scikit-learn's object-array missing-value checks.
+        values = result[column].astype("string").str.strip()
+        values = values.mask(values.eq(""), pd.NA)
+        result[column] = values.astype(object).where(values.notna(), np.nan)
     return result
 
 

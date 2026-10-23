@@ -1,5 +1,6 @@
 import { Activity, ArrowRight, Database, Download, ShieldAlert, UsersRound } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useDataset } from "../context/DatasetContext";
 import { useDashboard } from "../hooks/useDashboard";
@@ -7,27 +8,33 @@ import LoadingState from "../components/common/LoadingState";
 import ErrorState from "../components/common/ErrorState";
 import { datasetListState } from "../utils/roleNavigation";
 import { getAvatarDetails } from "../utils/userAvatar";
+import "./Dashboard.css";
 
-function Metric({ label, value, note, Icon, tone = "violet" }) {
-  return <article className="metric-card"><div className="metric-top"><span className={`metric-icon ${tone}`}><Icon size={18} /></span></div><p className="metric-label">{label}</p><strong className="metric-value">{value}</strong><div className="metric-footer">{note}</div></article>;
+function Metric({ label, value, note, Icon, tone = "violet", to }) {
+  const className = `metric-card${to ? " metric-card-link" : ""}`;
+  const contents = <><div className="metric-top"><span className={`metric-icon ${tone}`}><Icon size={18} /></span></div><p className="metric-label">{label}</p><strong className="metric-value">{value}</strong><div className="metric-footer">{note}</div></>;
+  return to ? <Link className={className} to={to} aria-label={`${label}: ${value}. ${note}`}>{contents}</Link> : <article className={className}>{contents}</article>;
 }
 
-function RiskPanel({ data }) {
+function RiskAnalysisMetric({ data, destination }) {
   const distribution = data?.risk_distribution;
-  const total = distribution ? Object.values(distribution).reduce((sum, value) => sum + value, 0) : 0;
-  const percentages = total ? [distribution.low, distribution.medium, distribution.high].map((value) => value / total * 100) : [0, 0, 0];
-  const endLow = percentages[0];
-  const endMedium = endLow + percentages[1];
-  return <article className="panel risk-panel">
-    <div className="panel-heading"><div><h2>Persisted risk distribution</h2><p>Latest saved predictions in this dataset</p></div><Link className="inline-link" to="/early-warning">Open early warning <span>→</span></Link></div>
-    {distribution && total > 0 ? <div className="risk-breakdown"><div className="donut-wrap"><div className="donut" style={{ background: `conic-gradient(#12b6a3 0 ${endLow}%, #6948f5 ${endLow}% ${endMedium}%, #e7465b ${endMedium}% 100%)` }}><div className="donut-center"><strong>{total.toLocaleString()}</strong><span>predictions</span></div></div></div><div className="risk-legend"><div><span><i className="risk-low"/>Low</span><strong>{distribution.low}</strong></div><div><span><i className="risk-medium"/>Medium</span><strong>{distribution.medium}</strong></div><div><span><i className="risk-high"/>High</span><strong>{distribution.high}</strong></div></div></div> : <div className="dashboard-api-note"><span><ShieldAlert size={18} /></span><p>No persisted predictions are available for this dataset. Learners without saved predictions are not assigned a risk category.</p></div>}
-  </article>;
+  const predictionCount = Number(data?.learners_with_prediction) || 0;
+  const hasRiskCounts = predictionCount > 0 && distribution;
+  return <Link className="metric-card metric-card-link risk-analysis-metric" to={destination} aria-label={`Risk Analysis: ${predictionCount.toLocaleString()} learners with saved predictions. Open Early Warning Center.`}>
+    <div className="metric-top"><span className="metric-icon red"><ShieldAlert size={18}/></span></div>
+    <p className="metric-label">Risk Analysis</p>
+    <strong className="metric-value">{predictionCount.toLocaleString()} learners</strong>
+    <span className="risk-analysis-caption">with saved predictions</span>
+    {hasRiskCounts ? <div className="risk-analysis-counts"><span><i className="risk-high"/>High <strong>{distribution.high.toLocaleString()}</strong></span><span><i className="risk-medium"/>Medium <strong>{distribution.medium.toLocaleString()}</strong></span><span><i className="risk-low"/>Low <strong>{distribution.low.toLocaleString()}</strong></span></div> : <span className="risk-analysis-caption">Risk distribution unavailable; records without predictions are unranked.</span>}
+  </Link>;
 }
 
 export default function Dashboard() {
   const { user, accountProfile } = useAuth();
   const { dataset, datasets, datasetId, selectDataset, loading: datasetsLoading, error: datasetsError, refresh } = useDataset();
-  const { data, loading, error, retry } = useDashboard();
+  const [overallScope, setOverallScope] = useState(false);
+  const activeDatasetId = overallScope ? "all" : datasetId;
+  const { data, loading, error, retry } = useDashboard(activeDatasetId);
   const listState = datasetListState({ loading: datasetsLoading, error: datasetsError, datasets });
   const displayLabel = getAvatarDetails(user, accountProfile).label;
   const firstName = displayLabel === "User" ? "there" : displayLabel.split(" ")[0];
@@ -41,24 +48,23 @@ export default function Dashboard() {
   </>;
 
   return <>
-    <div className="page-heading dashboard-title"><div><div className="overline">CHURNSHIELD OVERVIEW</div><h1>Welcome, {firstName}</h1><p>{dataset?.dataset_name || "Selected dataset"} · Summary of persisted learner records and predictions.</p></div><div className="heading-actions">
-      {datasets.length > 1 && <label className="dashboard-dataset-select"><span className="sr-only">Active dataset</span><select aria-label="Active dataset" value={datasetId} onChange={(event) => selectDataset(event.target.value)}>{datasets.map((item) => <option key={item.id} value={item.id}>{item.dataset_name} · {item.status}</option>)}</select></label>}
+    <div className="page-heading dashboard-title"><div><div className="overline">CHURNSHIELD OVERVIEW</div><h1>Welcome, {firstName}</h1><p>{overallScope ? "All Datasets / Overall Class" : dataset?.dataset_name || "Selected dataset"} · Summary of persisted learner records and predictions.</p></div><div className="heading-actions">
+      <label className="dashboard-dataset-select"><span className="sr-only">Active dataset scope</span><select aria-label="Active dataset scope" value={overallScope ? "all" : datasetId} onChange={(event) => { if (event.target.value === "all") setOverallScope(true); else { setOverallScope(false); selectDataset(event.target.value); } }}><option value="all">All Datasets / Overall Class</option>{datasets.map((item) => <option key={item.id} value={item.id}>{item.dataset_name} · {item.status}</option>)}</select></label>
       {accountProfile?.app_role === "admin" && <Link to="/reports" className="secondary-button"><Download size={15}/> Export overview</Link>}
       <Link to="/early-warning" className="primary-button"><ShieldAlert size={15}/> Review high-risk</Link>
     </div></div>
-    {dataset?.status === "failed" && <ErrorState title="Dataset processing failed" message={dataset.error_summary || "Review the dataset validation results and retry processing."} onRetry={() => refresh().catch(() => {})} />}
-    {dataset && dataset.status !== "processed" && dataset.status !== "failed" && <div className="illustrative-banner api-notice"><span className="banner-spark"><Activity size={16} /></span><span><strong>Processing in progress.</strong> Dashboard statistics will appear when this dataset is ready.</span></div>}
-    {dataset?.status === "processed" && <>
+    {!overallScope && dataset?.status === "failed" && <ErrorState title="Dataset processing failed" message={dataset.error_summary || "Review the dataset validation results and retry processing."} onRetry={() => refresh().catch(() => {})} />}
+    {!overallScope && dataset && dataset.status !== "processed" && dataset.status !== "failed" && <div className="illustrative-banner api-notice"><span className="banner-spark"><Activity size={16} /></span><span><strong>Processing in progress.</strong> Dashboard statistics will appear when this dataset is ready.</span></div>}
+    {(overallScope || dataset?.status === "processed") && <>
       {loading && <LoadingState rows={2} label="Loading dataset summary" />}
       {error && <ErrorState title="Dashboard unavailable" message="The saved summary could not be loaded. Your dataset remains selected." onRetry={retry} />}
       {!loading && !error && data && <>
-        <section className="metrics-grid" aria-label="Dataset summary">
-          <Metric Icon={UsersRound} label="Learner-course records" value={data.total_learner_records.toLocaleString()} note="Records in selected dataset" />
-          <Metric Icon={ShieldAlert} tone="red" label="High-risk records" value={data.risk_distribution ? data.risk_distribution.high.toLocaleString() : "Unavailable"} note="Persisted predictions only" />
-          <Metric Icon={Activity} tone="amber" label="Medium-risk records" value={data.risk_distribution ? data.risk_distribution.medium.toLocaleString() : "Unavailable"} note="Persisted predictions only" />
-          <Metric Icon={Database} tone="green" label="Historical outcomes" value="Unavailable" note="Not included in the dashboard API" />
+        <section className="metrics-grid" aria-label={overallScope ? "Overall workspace summary" : "Dataset summary"}>
+          <Metric Icon={UsersRound} label="Learner-course records" value={data.total_learner_records.toLocaleString()} note="Open Learner Analytics" to={overallScope ? "/learners?scope=all" : "/learners"} />
+          <RiskAnalysisMetric data={data} destination={overallScope ? "/early-warning?scope=all" : `/early-warning?dataset_id=${encodeURIComponent(datasetId)}`}/>
+          <Metric Icon={Database} tone="green" label="Datasets included" value={Number(data.dataset_count ?? (overallScope ? 0 : 1)).toLocaleString()} note={overallScope ? "Processed datasets in this workspace" : "Selected dataset"} />
         </section>
-        <section className="dashboard-grid"><RiskPanel data={data} /><article className="panel engagement-panel"><div className="panel-heading"><div><h2>Historical outcomes</h2><p>Historical outcome breakdown is not available from the current dataset API.</p></div><span className="metric-icon blue"><Activity size={18} /></span></div><div className="dashboard-api-note"><span><UsersRound size={18} /></span><p>Historical OULAD outcomes and operational predictions are separate. No outcome chart is shown without persisted outcome data.</p></div><Link className="inline-link" to="/learners">Browse learner records <span>→</span></Link></article></section>
+        {overallScope && data.dataset_comparison?.length > 0 && <section className="panel dataset-comparison-panel"><div className="panel-heading"><div><h2>Dataset-wise comparison</h2><p>Aggregated from each processed dataset’s persisted summary.</p></div></div><div className="table-scroll"><table className="learner-table"><thead><tr><th>Dataset</th><th>Learner-course records</th><th>Predictions</th><th>Coverage</th><th>Low risk</th><th>Medium risk</th><th>High risk</th></tr></thead><tbody>{data.dataset_comparison.map((row) => <tr key={row.dataset_id}><td>{row.dataset_name}</td><td>{row.learner_course_records.toLocaleString()}</td><td>{row.available_predictions.toLocaleString()}</td><td>{row.prediction_coverage == null ? "—" : `${(row.prediction_coverage * 100).toFixed(1)}%`}</td><td>{row.low_risk_count.toLocaleString()}</td><td>{row.medium_risk_count.toLocaleString()}</td><td>{row.high_risk_count.toLocaleString()}</td></tr>)}</tbody></table></div></section>}
       </>}
     </>}
   </>;

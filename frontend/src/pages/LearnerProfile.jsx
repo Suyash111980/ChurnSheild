@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowUpRight, ArrowDownRight, Clock3, Sparkles, UserRound } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import EmptyState from "../components/common/EmptyState";
 import ErrorState from "../components/common/ErrorState";
 import LoadingState from "../components/common/LoadingState";
@@ -53,6 +53,10 @@ function EvidenceItem({ item, compact = false }) {
 export default function LearnerProfile() {
   const { learnerId } = useParams();
   const { datasetId } = useDataset();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const requestedDatasetId = searchParams.get("dataset_id");
+  const effectiveDatasetId = requestedDatasetId || datasetId;
   const navigate = useNavigate();
   const [request, setRequest] = useState({ datasetId: null, learnerId: null, record: null, loading: true, error: null });
   const [attempt, setAttempt] = useState(0);
@@ -60,31 +64,31 @@ export default function LearnerProfile() {
 
   useEffect(() => {
     const controller = new AbortController();
-    if (!datasetId) { setRequest({ datasetId: null, learnerId, record: null, loading: false, error: null }); return () => controller.abort(); }
-    setRequest({ datasetId, learnerId, record: null, loading: true, error: null });
-    getLearner(learnerId, datasetId, { signal: controller.signal })
+    if (!effectiveDatasetId) { setRequest({ datasetId: null, learnerId, record: null, loading: false, error: null }); return () => controller.abort(); }
+    setRequest({ datasetId: effectiveDatasetId, learnerId, record: null, loading: true, error: null });
+    getLearner(learnerId, effectiveDatasetId, { signal: controller.signal })
       .then((result) => {
         if (!result?.learner || typeof result.learner !== "object") throw new Error("The learner profile response was empty or invalid.");
-        setRequest({ datasetId, learnerId, record: result, loading: false, error: null });
+        setRequest({ datasetId: effectiveDatasetId, learnerId, record: result, loading: false, error: null });
       })
-      .catch((error) => { if (error.name !== "AbortError") setRequest({ datasetId, learnerId, record: null, loading: false, error }); });
+      .catch((error) => { if (error.name !== "AbortError") setRequest({ datasetId: effectiveDatasetId, learnerId, record: null, loading: false, error }); });
     return () => controller.abort();
-  }, [learnerId, datasetId, attempt]);
+  }, [learnerId, effectiveDatasetId, attempt]);
 
-  const current = request.datasetId === datasetId && request.learnerId === learnerId;
+  const current = request.datasetId === effectiveDatasetId && request.learnerId === learnerId;
   const record = current ? request.record : null;
   const error = current ? request.error : null;
-  const loading = Boolean(datasetId) && (!current || request.loading);
+  const loading = Boolean(effectiveDatasetId) && (!current || request.loading);
   const learner = record?.learner;
   const prediction = record?.latest_prediction;
   const explanations = Array.isArray(record?.risk_explanations) ? record.risk_explanations : [];
   const summaryEvidence = useMemo(() => buildRiskEvidenceSummary(explanations, 3), [explanations]);
   const rankedExplanations = useMemo(() => rankPersistedExplanations(explanations), [explanations]);
-  const recommendations = useMemo(() => scopeLearnerRecommendations(record?.recommendations, learner?.id, datasetId), [record?.recommendations, learner?.id, datasetId]);
+  const recommendations = useMemo(() => scopeLearnerRecommendations(record?.recommendations, learner?.id, effectiveDatasetId), [record?.recommendations, learner?.id, effectiveDatasetId]);
   const name = (typeof record?.student_name === "string" && record.student_name.trim()) || (learner?.id_student != null ? `Learner ${learner.id_student}` : `Learner ${learnerId}`);
 
   return <>
-    <Link to="/learners" className="profile-back"><ArrowLeft size={15} /> Back to Learners</Link>
+    <Link to={location.state?.from || (requestedDatasetId ? `/learners?dataset_id=${encodeURIComponent(requestedDatasetId)}` : "/learners")} className="profile-back"><ArrowLeft size={15} /> Back to Learners</Link>
     <PageHeader eyebrow="LEARNER PROFILE" title={loading ? "Loading learner…" : error ? "Learner profile" : name} subtitle="Review the saved learner record, prediction evidence, and any persisted support actions." />
     {loading ? <LoadingState rows={5} label="Loading learner profile" /> : error ? <ErrorState {...getErrorState(error)} onRetry={retry} /> : !record ? <EmptyState title="Learner not found" message="The API did not return a learner for this identifier." actionLabel="Return to learners" action={() => navigate("/learners")} /> : <>
       <div className="illustrative-banner api-notice"><span className="banner-spark"><UserRound size={16} /></span><span>Database record <strong>{valueOrDash(learner.id)}</strong> · Learner ID <strong>{valueOrDash(learner.id_student)}</strong>. These identifiers are kept separate from the optional display name.</span></div>
@@ -108,7 +112,7 @@ export default function LearnerProfile() {
         {rankedExplanations.length ? <><ol className="profile-evidence-list profile-full-evidence">{rankedExplanations.slice(0, 5).map((item) => <EvidenceItem item={item} key={item.id || item.feature_name}/>)}</ol>{rankedExplanations.length > 5 && <details className="profile-all-explanations"><summary>Review all {rankedExplanations.length} saved feature contributions</summary><ol className="profile-evidence-list">{rankedExplanations.map((item) => <EvidenceItem item={item} key={item.id || item.feature_name}/>)}</ol></details>}</> : <p className="profile-empty-copy">There are no persisted contribution records to display.</p>}
       </section>
 
-      <section className="panel profile-recommendations-panel"><div className="panel-heading"><div><h2>Recommendations and support</h2><p>Persisted actions associated with this learner in the selected dataset.</p></div><Link className="secondary-button" to={`/recommendations?learner_id=${encodeURIComponent(learner.id)}`}>Open this learner’s queue</Link></div>
+      <section className="panel profile-recommendations-panel"><div className="panel-heading"><div><h2>Recommendations and support</h2><p>Persisted actions associated with this learner in the selected dataset.</p></div><Link className="secondary-button" to={`/recommendations?learner_id=${encodeURIComponent(learner.id)}&dataset_id=${encodeURIComponent(effectiveDatasetId)}`}>Open this learner’s queue</Link></div>
         {recommendations.length ? <div className="profile-recommendation-list">{recommendations.map((item) => {
           const currentPrediction = prediction?.id && item.prediction_id === prediction.id;
           return <article className="profile-recommendation" key={item.id}><div className="profile-recommendation-heading"><strong>{valueOrDash(item.action)}</strong><span className={`action-status profile-status-${item.status || "unknown"}`}>{statusLabels[item.status] || item.status || "Status unavailable"}</span></div><p>{valueOrDash(item.reason)}</p><div className="profile-recommendation-meta"><span>{item.prediction_id ? currentPrediction ? "Related to latest saved prediction" : "Related to another saved prediction" : "Prediction link unavailable"}</span>{item.requires_human_review === true && <span>Human review required</span>}</div></article>;

@@ -23,8 +23,38 @@ export function accountStatusMessage({ approvalStatus, profileErrorStatus, profi
       description: "The account profile could not be authorized. Contact your administrator to review your account access.",
     };
   }
+  if (profileErrorStatus === 401) {
+    return {
+      heading: "Your session needs to be renewed",
+      description: "ChurnShield could not authenticate the saved session. Sign out, sign in again, and retry the account check.",
+    };
+  }
+  if (profileErrorStatus === 404) {
+    return {
+      heading: "Account status endpoint unavailable",
+      description: "The API did not find the account-status route. Check that the frontend and backend are running compatible versions, then retry.",
+    };
+  }
+  if (profileErrorStatus === 503) {
+    return {
+      heading: "Account service unavailable",
+      description: "ChurnShield reached the API, but its authentication or profile service is not ready. This is not an approval decision. Retry later or contact your administrator.",
+    };
+  }
+  if (Number.isInteger(profileErrorStatus) && profileErrorStatus >= 500) {
+    return {
+      heading: "ChurnShield service error",
+      description: "The account-status API returned a server error. Your approval status has not been determined; retry later or contact your administrator.",
+    };
+  }
+  if (profileErrorStatus === null || profileErrorStatus === undefined) {
+    return {
+      heading: "Cannot reach the account-status API",
+      description: "No HTTP response was received. Check that the backend is running at the configured API URL and that its CORS allowlist includes this frontend origin.",
+    };
+  }
   return {
-    heading: "Approval status unavailable",
-    description: "We could not verify your account approval. Sign in again or contact your administrator for help.",
+    heading: "Approval status could not be checked",
+    description: "The API returned an unexpected response. This is not an approval decision; retry or contact your administrator.",
   };
 }

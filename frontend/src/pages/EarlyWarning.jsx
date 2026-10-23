@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ArrowRight, ChevronLeft, ChevronRight, Download, Search, ShieldAlert, UsersRound } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import PageHeader from "../components/layout/PageHeader";
 import { useDataset } from "../context/DatasetContext";
 import { getEarlyWarnings } from "../services/recommendationService";
@@ -16,6 +16,16 @@ function evidenceValue(value) {
   if (value == null) return "Unavailable";
   if (typeof value === "string") return value;
   try { return JSON.stringify(value); } catch { return "Unavailable"; }
+}
+function warningErrorMessage(error) {
+  const status = Number(error?.status ?? error?.message?.match(/\((\d{3})\)/)?.[1]);
+  if (status === 401) return "Your session may have expired. Sign in again to review saved risk records.";
+  if (status === 403) return "Your account is not authorized to review this workspace’s records.";
+  if (status === 404) return "The selected dataset is not available in this workspace.";
+  if (status === 422) return error?.detail || "The dataset scope or filters were rejected. Choose a valid scope and retry.";
+  if (status >= 500) return "The early-warning service or database is temporarily unavailable.";
+  if (status > 0) return error?.detail || `The early-warning request failed with HTTP ${status}.`;
+  return "No HTTP response was received. Check that the backend is running and retry.";
 }
 
 function EvidenceCell({ row }) {
@@ -40,7 +50,11 @@ function EvidenceCell({ row }) {
 }
 
 export default function EarlyWarning() {
-  const { datasetId } = useDataset();
+  const { datasetId: activeDatasetId, datasets } = useDataset();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const overallScope = searchParams.get("scope") === "all";
+  const datasetId = overallScope ? "all" : searchParams.get("dataset_id") || activeDatasetId;
   const [request, setRequest] = useState({ datasetId: null, result: null, error: null, loading: false });
   const [reload, setReload] = useState(0);
   const [query, setQuery] = useState("");
@@ -50,11 +64,11 @@ export default function EarlyWarning() {
     let active = true;
     if (!datasetId) { setRequest({ datasetId: null, result: null, error: null, loading: false }); return () => { active = false; }; }
     setRequest({ datasetId, result: null, error: null, loading: true });
-    getEarlyWarnings({ dataset_id: datasetId, limit: 20, offset })
+    getEarlyWarnings({ ...(datasetId === "all" ? { scope: "all" } : { dataset_id: datasetId }), limit: 20, offset, ...(risk ? { risk_category: risk } : {}), ...(query.trim() ? { q: query.trim() } : {}) })
       .then((result) => { if (active) setRequest({ datasetId, result, error: null, loading: false }); })
       .catch((error) => { if (active) setRequest({ datasetId, result: null, error, loading: false }); });
     return () => { active = false; };
-  }, [datasetId, offset, reload]);
+  }, [datasetId, offset, reload, risk, query]);
   const current = request.datasetId === datasetId;
   const result = current ? request.result : null;
   const error = current ? request.error : null;
@@ -72,18 +86,28 @@ export default function EarlyWarning() {
     const url = URL.createObjectURL(new Blob([lines.map((line) => line.map(csvCell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" }));
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = "churnshield-early-warning.csv"; anchor.click(); URL.revokeObjectURL(url);
   }
+  function selectScope(value) {
+    setOffset(0);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (value === "all") { next.set("scope", "all"); next.delete("dataset_id"); }
+      else { next.delete("scope"); if (value) next.set("dataset_id", value); else next.delete("dataset_id"); }
+      return next;
+    });
+  }
 
   return <><PageHeader eyebrow="INTERVENTION WORKSPACE" title="Early Warning Center" subtitle="Prioritize outreach using persisted risk results and reviewable evidence."/>
+    <label className="learner-dataset-scope">Dataset scope<select aria-label="Early Warning dataset scope" value={overallScope ? "all" : datasetId} onChange={(event) => selectScope(event.target.value)}><option value="all">All Datasets / Overall Class</option>{datasets.map((item) => <option key={item.id} value={item.id}>{item.dataset_name} · {item.status}</option>)}</select></label>
     <div className="page-heading-actions"><button className="secondary-button" disabled={!rows.length} onClick={exportRows}><Download size={15}/> Export visible rows</button><Link className="primary-button" to="/recommendations">View recommendations <ArrowRight size={15}/></Link></div>
     {!datasetId && <EmptyState title="Select a dataset" message="Choose a processed dataset to review saved risk records and available evidence."/>}
     {loading && <LoadingState rows={4} label="Loading early warning records"/>}
-    {error && <ErrorState title="Early warning data unavailable" message="The warning queue could not be loaded. No learners are labeled high risk when prediction data is missing." onRetry={() => setReload((value) => value + 1)}/>}
+    {error && <ErrorState title="Early warning data unavailable" message={`${warningErrorMessage(error)} No learners are labeled high risk when prediction data is missing.`} onRetry={() => setReload((value) => value + 1)}/>}
     {!loading && !error && result && <>
       <section className="metrics-grid warning-kpis"><Kpi Icon={UsersRound} tone="violet" value={result.total.toLocaleString()} label="Records with saved risk results"/><Kpi Icon={AlertTriangle} tone="amber" value={counts.high.toLocaleString()} label="High risk on this page" sub="Review evidence before action"/><Kpi Icon={ShieldAlert} tone="blue" value={counts.medium.toLocaleString()} label="Medium on this page"/><Kpi Icon={ShieldAlert} tone="green" value={counts.low.toLocaleString()} label="Low on this page"/></section>
       <section className="panel warning-panel"><div className="queue-heading"><div><span className="priority-tag"><i/> PRIORITY QUEUE</span><h2>Persisted risk records</h2><p>Missing predictions remain unranked; risk labels come from saved predictions.</p></div><div className="review-progress"><span>Page records: {result.count} of {result.total}</span><i><b style={{ width: result.total ? `${Math.min(100, result.count / result.total * 100)}%` : "0%" }}/></i><small>{result.has_more ? "More records available" : "End of available records"}</small></div></div>
         <div className="table-toolbar"><label className="search-box"><Search size={16}/><input aria-label="Search learner or evidence" placeholder="Search learner, course, or evidence…" value={query} onChange={(event) => setQuery(event.target.value)}/></label><div className="filter-row"><select aria-label="Filter risk level" value={risk} onChange={(event) => setRisk(event.target.value)}><option value="">All risk levels</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div></div>
         <p className="table-caption">{rows.length} matching persisted records <span>Sorted by backend warning order</span></p>
-        <div className="table-scroll"><table className="learner-table warning-table"><colgroup><col/><col/><col/><col/><col/><col/></colgroup><thead><tr><th>LEARNER ID</th><th>COURSE</th><th>RISK LEVEL</th><th>PROBABILITY</th><th>AVAILABLE EVIDENCE</th><th>PROFILE</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><strong className="record-link">{row.id_student != null ? `Learner ${row.id_student}` : `Learner ${row.id}`}</strong>{row.student_name && <small className="warning-learner-name">{row.student_name}</small>}</td><td>{row.code_module || "—"} · {row.code_presentation || "—"}</td><td><span className={`risk-badge ${riskClass(row.latest_risk_category)}`}><i/>{row.latest_risk_category || "Unavailable"}</span></td><td>{row.latest_risk_probability == null ? "—" : `${(row.latest_risk_probability * 100).toFixed(1)}%`}</td><td><EvidenceCell row={row}/></td><td><Link className="inline-link" to={`/learners/${encodeURIComponent(row.id)}`}>Review →</Link></td></tr>)}</tbody></table>{rows.length === 0 && <EmptyState title="No matching records" message="There are no saved risk results matching these filters."/>}</div>
+        <div className="table-scroll"><table className="learner-table warning-table"><colgroup><col/><col/><col/><col/><col/><col/></colgroup><thead><tr><th>LEARNER ID</th><th>COURSE</th><th>RISK LEVEL</th><th>PROBABILITY</th><th>AVAILABLE EVIDENCE</th><th>PROFILE</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><strong className="record-link">{row.id_student != null ? `Learner ${row.id_student}` : `Learner ${row.id}`}</strong>{row.student_name && <small className="warning-learner-name">{row.student_name}</small>}</td><td>{row.code_module || "—"} · {row.code_presentation || "—"}</td><td><span className={`risk-badge ${riskClass(row.latest_risk_category)}`}><i/>{row.latest_risk_category || "Unavailable"}</span></td><td>{row.latest_risk_probability == null ? "—" : `${(row.latest_risk_probability * 100).toFixed(1)}%`}</td><td><EvidenceCell row={row}/></td><td><Link className="inline-link" to={`/learners/${encodeURIComponent(row.id)}?dataset_id=${encodeURIComponent(row.dataset_id)}`} state={{ from: `${location.pathname}${location.search}` }}>Review →</Link></td></tr>)}</tbody></table>{rows.length === 0 && <EmptyState title="No matching records" message="There are no saved risk results matching these filters."/>}</div>
         {result.total > 20 && <div className="table-pagination"><span>API records <strong>{offset + 1}–{offset + result.count} of {result.total}</strong></span><div><button className="page-button" disabled={offset === 0} onClick={() => setOffset((value) => Math.max(0, value - 20))} aria-label="Previous warning page"><ChevronLeft size={17}/></button><span className="page-number">Page {Math.floor(offset / 20) + 1}</span><button className="page-button" disabled={!result.has_more} onClick={() => setOffset((value) => value + 20)} aria-label="Next warning page"><ChevronRight size={17}/></button></div></div>}
       </section>
     </>}

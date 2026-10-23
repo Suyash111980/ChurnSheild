@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useDataset } from "../context/DatasetContext";
 import { getDashboardSummary } from "../services/dashboardService";
 
-export function useDashboard() {
-  const { datasetId } = useDataset();
+export function useDashboard(selectedDatasetId) {
+  const { datasetId: activeDatasetId } = useDataset();
+  const datasetId = selectedDatasetId === undefined ? activeDatasetId : selectedDatasetId;
   const [result, setResult] = useState({ datasetId: null, data: null, error: null, loading: true });
   const [requestVersion, setRequestVersion] = useState(0);
 

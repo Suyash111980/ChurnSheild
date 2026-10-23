@@ -26,6 +26,9 @@ export default function Login() {
     if (reason.includes("invalid login credentials") || reason.includes("invalid credentials")) {
       return "Email or password is incorrect. Check your details and try again.";
     }
+    if (reason.includes("invalid api key")) {
+      return "The Supabase authentication configuration is invalid. Check VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in frontend/.env.local.";
+    }
     if (reason.includes("fetch") || reason.includes("network") || reason.includes("timeout")) {
       return "We couldn’t reach the authentication service. Check your connection and try again.";
     }

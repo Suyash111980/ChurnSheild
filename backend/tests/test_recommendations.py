@@ -67,8 +67,20 @@ def clear_overrides():
 
 
 def test_recommendations_are_paginated_and_filterable(monkeypatch):
-    fake = FakeRecommendationQuery([{"id": RECOMMENDATION_ID, "status": "pending"}])
+    fake = FakeRecommendationQuery([{
+        "id": RECOMMENDATION_ID, "status": "pending", "learner_id": "learner-uuid",
+        "prediction_id": "prediction-uuid", "action": "Offer a check-in", "reason": "Saved evidence.",
+        "learners": {
+            "dataset_id": DATASET_ID, "external_learner_id": "00123",
+            "code_module": "AAA", "code_presentation": "2014J",
+        },
+    }])
     monkeypatch.setattr(recommendation_repository, "supabase", fake)
+    monkeypatch.setattr(
+        recommendation_repository,
+        "count_recommendations_by_status",
+        lambda **_filters: {"pending": 8, "in_progress": 2, "completed": 1, "dismissed": 0},
+    )
     app.dependency_overrides[require_processed_dataset] = lambda: {
         "id": DATASET_ID, "owner_id": str(uuid4()), "status": "processed"
     }
@@ -80,10 +92,89 @@ def test_recommendations_are_paginated_and_filterable(monkeypatch):
     assert response.status_code == 200
     assert "learners!inner" in fake.selected
     assert response.json()["count"] == 1
+    assert response.json()["status_counts"] == {
+        "pending": 8, "in_progress": 2, "completed": 1, "dismissed": 0,
+    }
+    assert response.json()["data"][0]["external_learner_id"] == "00123"
+    assert response.json()["data"][0]["code_module"] == "AAA"
+    assert "learners" not in response.json()["data"][0]
     assert fake.filters[0] == ("learners.dataset_id", DATASET_ID)
     assert fake.filters[1][0] == "learner_id"
     assert fake.filters[2] == ("status", "pending")
     assert fake.requested_range == (5, 14)
+
+
+def test_status_count_query_is_dataset_scoped_and_ignores_pagination_and_status_filter(monkeypatch):
+    class StatusCountQuery:
+        def __init__(self, rows):
+            self.rows = rows
+            self.filters = []
+            self.requests = []
+
+        def table(self, _name):
+            return self
+
+        def select(self, _columns, **kwargs):
+            self.requests.append(kwargs)
+            return self
+
+        def eq(self, field, value):
+            self.filters.append((field, value))
+            return self
+
+        def execute(self):
+            self.requests[-1]["filters"] = list(self.filters)
+            matched = [row for row in self.rows if all(
+                row.get("learner_dataset_id") == value if field == "learners.dataset_id"
+                else row.get(field) == value
+                for field, value in self.filters
+            )]
+            self.filters = []
+            return SimpleNamespace(data=[], count=len(matched))
+
+    fake = StatusCountQuery([
+        {"learner_dataset_id": DATASET_ID, "learner_id": "learner-1", "prediction_id": "prediction-1", "status": "pending"},
+        {"learner_dataset_id": DATASET_ID, "learner_id": "learner-1", "prediction_id": "prediction-2", "status": "pending"},
+        {"learner_dataset_id": DATASET_ID, "learner_id": "learner-1", "prediction_id": "prediction-3", "status": "completed"},
+        {"learner_dataset_id": str(uuid4()), "learner_id": "learner-1", "prediction_id": "prediction-1", "status": "dismissed"},
+    ])
+    monkeypatch.setattr(recommendation_repository, "supabase", fake)
+
+    counts = recommendation_repository.count_recommendations_by_status(
+        dataset_id=DATASET_ID, learner_id="learner-1"
+    )
+
+    assert counts == {"pending": 2, "in_progress": 0, "completed": 1, "dismissed": 0}
+    assert len(fake.requests) == 4
+    assert all(request["count"] == "exact" and request["head"] is True for request in fake.requests)
+    assert all(("learners.dataset_id", DATASET_ID) in request["filters"] for request in fake.requests)
+    assert all(("learner_id", "learner-1") in request["filters"] for request in fake.requests)
+
+
+def test_recommendation_page_includes_unpaginated_status_totals(monkeypatch):
+    monkeypatch.setattr(
+        recommendation_repository,
+        "list_recommendations",
+        lambda **_filters: SimpleNamespace(data=[], count=0),
+    )
+    monkeypatch.setattr(
+        recommendation_repository,
+        "count_recommendations_by_status",
+        lambda **filters: {
+            "pending": 15, "in_progress": 4, "completed": 5, "dismissed": 1,
+        } if filters["dataset_id"] == DATASET_ID else pytest.fail("dataset scope was lost"),
+    )
+
+    result = recommendation_service.list_recommendations(
+        dataset_id=DATASET_ID, limit=20, offset=0, recommendation_status="dismissed",
+    )
+
+    assert result["data"] == []
+    assert result["total"] == 0
+    assert result["has_more"] is False
+    assert result["status_counts"] == {
+        "pending": 15, "in_progress": 4, "completed": 5, "dismissed": 1,
+    }
 
 
 def test_recommendation_update_access_is_role_restricted(monkeypatch):

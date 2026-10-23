@@ -5,10 +5,10 @@ export default function LearnerFilters({
   onSearchChange,
   module,
   onModuleChange,
-  modules,
   presentation,
   onPresentationChange,
-  presentations,
+  risk,
+  onRiskChange,
   onClear,
   hasFilters,
   activeFilters = [],
@@ -18,28 +18,17 @@ export default function LearnerFilters({
     <div className="table-toolbar">
       <label className="search-box">
         <Search size={16} aria-hidden="true" />
-        <span className="sr-only">Search this page of learner records</span>
+        <span className="sr-only">Search learner ID or course context across the selected scope</span>
         <input
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Search learner ID or course context on this page…"
+          placeholder="Search learner ID or course context across this scope…"
         />
       </label>
       <div className="filter-row">
-        <label className="filter-select-label">
-          <span className="sr-only">Filter by module</span>
-          <select value={module} onChange={(event) => onModuleChange(event.target.value)}>
-            <option value="">All modules on this page</option>
-            {modules.map((item) => <option key={item} value={item}>{item}</option>)}
-          </select>
-        </label>
-        <label className="filter-select-label">
-          <span className="sr-only">Filter by presentation</span>
-          <select value={presentation} onChange={(event) => onPresentationChange(event.target.value)}>
-            <option value="">All presentations on this page</option>
-            {presentations.map((item) => <option key={item} value={item}>{item}</option>)}
-          </select>
-        </label>
+        <label className="filter-select-label"><span className="sr-only">Filter by module</span><input value={module} onChange={(event) => onModuleChange(event.target.value)} placeholder="Module" maxLength={16} /></label>
+        <label className="filter-select-label"><span className="sr-only">Filter by presentation</span><input value={presentation} onChange={(event) => onPresentationChange(event.target.value)} placeholder="Presentation" maxLength={16} /></label>
+        <label className="filter-select-label"><span className="sr-only">Filter by saved risk category</span><select value={risk} onChange={(event) => onRiskChange(event.target.value)}><option value="">All risk categories</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
         {hasFilters && (
           <button className="secondary-button clear-filter-button" type="button" onClick={onClear}>
             <X size={14} /> Clear

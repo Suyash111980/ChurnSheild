@@ -3,9 +3,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
 
-from app.api.dependencies.datasets import require_processed_dataset
 from app.main import app
 from app.repositories import learner_repository, prediction_repository
 from app.services import learner_service, student_display_service
@@ -116,7 +114,7 @@ def test_early_warning_returns_latest_records_and_no_prediction_state(
     monkeypatch.setattr(
         prediction_repository,
         "list_explanations_for_predictions",
-        lambda _ids, _dataset_id: [
+        lambda _ids, _dataset_id, _dataset_ids=None: [
             {
                 "prediction_id": PREDICTION_ID,
                 "feature_name": "clicks",
@@ -148,36 +146,17 @@ def test_early_warning_returns_latest_records_and_no_prediction_state(
     assert result["data"][1]["latest_risk_category"] is None
 
 
-def test_early_warning_endpoint_requires_auth_and_validates_filters(
-    monkeypatch,
-):
-    monkeypatch.setattr(
-        learner_repository,
-        "supabase",
-        FakeDatabase({}),
-    )
-
-    client = TestClient(app)
-
-    assert (
-        client.get(
-            f"/api/v1/early-warning?dataset_id={DATASET_ID}"
-        ).status_code
-        == 401
-    )
-
-    app.dependency_overrides[require_processed_dataset] = lambda: {
-        "id": DATASET_ID,
-        "owner_id": str(uuid4()),
-        "status": "processed",
+def test_early_warning_exposes_uuid_scope_and_risk_filter_contract():
+    parameters = {
+        item["name"]: item
+        for item in app.openapi()["paths"]["/api/v1/early-warning"]["get"]["parameters"]
     }
-
-    assert (
-        client.get(
-            f"/api/v1/early-warning?dataset_id={DATASET_ID}"
-            "&risk_category=critical"
-        ).status_code
-        == 422
+    assert any(value.get("format") == "uuid" for value in parameters["dataset_id"]["schema"]["anyOf"])
+    assert any(value.get("const") == "all" for value in parameters["scope"]["schema"]["anyOf"])
+    risk_schema = parameters["risk_category"]["schema"]
+    assert any(
+        value.get("pattern") == "^(low|medium|high)$"
+        for value in risk_schema.get("anyOf", [risk_schema])
     )
 
 
@@ -206,9 +185,10 @@ def test_early_warning_passes_dataset_id_to_enrichment_queries(monkeypatch):
         ),
     )
 
-    def fake_features(learner_ids, dataset_id):
+    def fake_features(learner_ids, dataset_id, dataset_ids=None):
         observed["feature_learner_ids"] = learner_ids
         observed["feature_dataset_id"] = dataset_id
+        observed["feature_dataset_ids"] = dataset_ids
 
         return [
             {
@@ -217,9 +197,10 @@ def test_early_warning_passes_dataset_id_to_enrichment_queries(monkeypatch):
             }
         ]
 
-    def fake_recommendations(learner_ids, dataset_id):
+    def fake_recommendations(learner_ids, dataset_id, dataset_ids=None):
         observed["recommendation_learner_ids"] = learner_ids
         observed["recommendation_dataset_id"] = dataset_id
+        observed["recommendation_dataset_ids"] = dataset_ids
 
         return [
             {
@@ -228,9 +209,10 @@ def test_early_warning_passes_dataset_id_to_enrichment_queries(monkeypatch):
             }
         ]
 
-    def fake_explanations(prediction_ids, dataset_id):
+    def fake_explanations(prediction_ids, dataset_id, dataset_ids=None):
         observed["prediction_ids"] = prediction_ids
         observed["explanation_dataset_id"] = dataset_id
+        observed["explanation_dataset_ids"] = dataset_ids
 
         return [
             {

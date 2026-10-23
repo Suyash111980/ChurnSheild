@@ -1,7 +1,9 @@
 import { apiRequest } from "./apiClient";
 
 export const getLearners = (params = {}, options = {}) => {
-  const query = new URLSearchParams(params);
+  const query = new URLSearchParams(Object.fromEntries(
+    Object.entries(params).filter(([, value]) => value != null && value !== "")
+  ));
   return apiRequest(`/learners?${query}`, options);
 };
 

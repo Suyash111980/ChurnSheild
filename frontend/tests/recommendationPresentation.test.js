@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { countRecommendationStatuses, getRecommendationQueueState } from "../src/utils/recommendationPresentation.js";
+import { countRecommendationStatuses, getRecommendationQueueState, getRecommendationStatusCounts } from "../src/utils/recommendationPresentation.js";
 
 const page = (data = [], overrides = {}) => ({
   data,
@@ -9,6 +9,7 @@ const page = (data = [], overrides = {}) => ({
   count: data.length,
   total: data.length,
   has_more: false,
+  status_counts: { pending: 0, in_progress: 0, completed: 0, dismissed: 0 },
   ...overrides,
 });
 
@@ -56,6 +57,17 @@ describe("persisted recommendation queue presentation", () => {
     assert.equal(getRecommendationQueueState({
       datasetId: "d", result: page([recommendation({ rule_id: " " })]),
     }), "unavailable");
+  });
+
+  it("uses persisted status totals across pages and falls back to current rows", () => {
+    const rows = [{ status: "pending" }];
+    assert.deepEqual(getRecommendationStatusCounts(page(rows, {
+      total: 21, has_more: true,
+      status_counts: { pending: 12, in_progress: 5, completed: 3, dismissed: 1 },
+    }), rows), { pending: 12, in_progress: 5, completed: 3, dismissed: 1 });
+    assert.deepEqual(getRecommendationStatusCounts({ status_counts: { pending: -1 } }, rows), {
+      pending: 1, in_progress: 0, completed: 0, dismissed: 0,
+    });
   });
 
   it("counts only statuses present in the returned page", () => {

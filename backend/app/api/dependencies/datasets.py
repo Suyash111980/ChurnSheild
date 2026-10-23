@@ -80,3 +80,35 @@ def require_processed_dataset(
             detail="Dataset processing has not completed.",
         )
     return dataset
+
+
+def resolve_processed_dataset_scope(dataset_id: str, user: dict) -> list[dict]:
+    """Resolve one owned processed dataset or all processed datasets in a workspace."""
+    if dataset_id == "all":
+        try:
+            datasets = dataset_repository.list_all_owned_datasets(
+                owner_id=user["id"], workspace_id=user["workspace_id"]
+            )
+        except Exception as exc:
+            logger.error("Workspace dataset scope lookup failed (exception_type=%s)", type(exc).__name__)
+            raise HTTPException(status_code=503, detail="Workspace datasets could not be verified.") from exc
+        return [row for row in datasets if row.get("status") == "processed"]
+
+    try:
+        normalized_id = str(UUID(dataset_id))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="Invalid dataset id.") from exc
+    if dataset_repository.supabase is None:
+        raise HTTPException(status_code=503, detail="Database service is not configured.")
+    try:
+        dataset = dataset_repository.get_owned_dataset(
+            normalized_id, user["id"], user["workspace_id"]
+        )
+    except Exception as exc:
+        logger.error("Dataset scope lookup failed (exception_type=%s)", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Dataset access could not be verified.") from exc
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Dataset not found.")
+    if dataset.get("status") != "processed":
+        raise HTTPException(status_code=409, detail="Dataset processing has not completed.")
+    return [dataset]

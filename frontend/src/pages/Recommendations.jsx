@@ -8,7 +8,7 @@ import { getRecommendations, updateRecommendationForDataset } from "../services/
 import LoadingState from "../components/common/LoadingState";
 import ErrorState from "../components/common/ErrorState";
 import EmptyState from "../components/common/EmptyState";
-import { countRecommendationStatuses, getRecommendationQueueState } from "../utils/recommendationPresentation";
+import { getRecommendationQueueState, getRecommendationStatusCounts } from "../utils/recommendationPresentation";
 
 const statusLabels = { pending: "Suggested", in_progress: "In progress", completed: "Completed", dismissed: "Dismissed" };
 const statusCards = [["pending", "Suggested", Lightbulb], ["in_progress", "In progress", Clock3], ["completed", "Completed", CheckCircle2], ["dismissed", "Dismissed", Sparkles]];
@@ -19,6 +19,8 @@ export default function Recommendations() {
   const { accountProfile } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const learnerFilter = searchParams.get("learner_id") || "";
+  const requestedDatasetId = searchParams.get("dataset_id");
+  const effectiveDatasetId = requestedDatasetId || datasetId;
   const [request, setRequest] = useState({ datasetId: null, result: null, error: null, loading: false });
   const [reload, setReload] = useState(0);
   const [status, setStatus] = useState("");
@@ -26,31 +28,32 @@ export default function Recommendations() {
   const [updateError, setUpdateError] = useState(null);
   const [offset, setOffset] = useState(0);
   const load = useCallback(() => {
-    if (!datasetId) { setRequest({ datasetId: null, result: null, error: null, loading: false }); return () => {}; }
+    if (!effectiveDatasetId) { setRequest({ datasetId: null, result: null, error: null, loading: false }); return () => {}; }
     const controller = new AbortController();
-    setRequest({ datasetId, result: null, error: null, loading: true });
-    getRecommendations({ dataset_id: datasetId, ...(learnerFilter ? { learner_id: learnerFilter } : {}), limit: 20, offset }, { signal: controller.signal })
-      .then((result) => setRequest({ datasetId, result, error: null, loading: false }))
-      .catch((error) => { if (error.name !== "AbortError") setRequest({ datasetId, result: null, error, loading: false }); });
+    setRequest({ datasetId: effectiveDatasetId, result: null, error: null, loading: true });
+    getRecommendations({ dataset_id: effectiveDatasetId, ...(learnerFilter ? { learner_id: learnerFilter } : {}), ...(status ? { status } : {}), limit: 20, offset }, { signal: controller.signal })
+      .then((result) => setRequest({ datasetId: effectiveDatasetId, result, error: null, loading: false }))
+      .catch((error) => { if (error.name !== "AbortError") setRequest({ datasetId: effectiveDatasetId, result: null, error, loading: false }); });
     return () => controller.abort();
-  }, [datasetId, learnerFilter, offset]);
-  useEffect(() => { setUpdateError(null); setOffset(0); setStatus(""); }, [datasetId, learnerFilter]);
+  }, [effectiveDatasetId, learnerFilter, status, offset]);
+  useEffect(() => { setUpdateError(null); setOffset(0); setStatus(""); }, [effectiveDatasetId, learnerFilter]);
+  useEffect(() => { setOffset(0); }, [status]);
   useEffect(() => load(), [load, reload]);
-  const current = request.datasetId === datasetId;
+  const current = request.datasetId === effectiveDatasetId;
   const result = current ? request.result : null;
   const error = current ? request.error : null;
-  const loading = Boolean(datasetId) && (!current || request.loading);
+  const loading = Boolean(effectiveDatasetId) && (!current || request.loading);
   const allRows = result?.data || [];
-  const rows = useMemo(() => allRows.filter((item) => !status || item.status === status), [allRows, status]);
-  const totals = useMemo(() => countRecommendationStatuses(allRows), [allRows]);
-  const queueState = getRecommendationQueueState({ datasetId, loading, error, result });
+  const rows = allRows;
+  const totals = useMemo(() => getRecommendationStatusCounts(result, allRows), [result, allRows]);
+  const queueState = getRecommendationQueueState({ datasetId: effectiveDatasetId, loading, error, result });
   const canUpdate = accountProfile?.app_role === "admin";
   async function update(item, nextStatus) {
     setWorkingId(item.id);
     setUpdateError(null);
-    try { await updateRecommendationForDataset(item.id, datasetId, nextStatus); setReload((value) => value + 1); }
+    try { await updateRecommendationForDataset(item.id, effectiveDatasetId, nextStatus); setReload((value) => value + 1); }
     catch {
-      setUpdateError({ datasetId });
+      setUpdateError({ datasetId: effectiveDatasetId });
       setReload((value) => value + 1);
     }
     finally { setWorkingId(null); }
@@ -62,15 +65,15 @@ export default function Recommendations() {
 
   return <><PageHeader eyebrow="RETENTION WORKSPACE" title="Recommendations" subtitle={learnerFilter ? `Review persisted suggestions for learner ${learnerFilter} in the selected dataset.` : "Review persisted retention suggestions and update permitted workflow statuses."}/>
     <div className="page-heading-actions"><button className="secondary-button" onClick={refreshAfterUpdateError} disabled={loading}><Clock3 size={14}/> Refresh queue</button></div>
-    {learnerFilter && <div className="illustrative-banner api-notice"><span className="banner-spark"><Lightbulb size={16}/></span><span>Queue filtered by learner ID <strong>{learnerFilter}</strong>. The backend still scopes results to the selected dataset.</span><button className="secondary-button recommendation-clear-filter" onClick={() => { setSearchParams({}); setOffset(0); }}>Show all learners</button></div>}
+    {learnerFilter && <div className="illustrative-banner api-notice"><span className="banner-spark"><Lightbulb size={16}/></span><span>Queue filtered by learner ID <strong>{learnerFilter}</strong>. The backend still scopes results to the selected dataset.</span><button className="secondary-button recommendation-clear-filter" onClick={() => { const next = new URLSearchParams(searchParams); next.delete("learner_id"); setSearchParams(next); setOffset(0); }}>Show all learners</button></div>}
     {queueState === "loading" && <LoadingState rows={4} label="Loading recommendations"/>}
     {queueState === "error" && <ErrorState title="Recommendations unavailable" message="The persisted recommendation queue could not be loaded." onRetry={() => setReload((value) => value + 1)}/>}
-    {updateError?.datasetId === datasetId && <ErrorState title="Recommendation status was not confirmed" message="The status update failed or its response was unavailable. Refresh the queue to verify the latest saved status before trying again." onRetry={refreshAfterUpdateError}/>}
+    {updateError?.datasetId === effectiveDatasetId && <ErrorState title="Recommendation status was not confirmed" message="The status update failed or its response was unavailable. Refresh the queue to verify the latest saved status before trying again." onRetry={refreshAfterUpdateError}/>}
     {queueState === "no_dataset" && <EmptyState title="Select a dataset" message="Choose a processed dataset to view its persisted recommendations."/>}
     {queueState === "unavailable" && <ErrorState title="Recommendations unavailable" message="The API response did not contain a recommendation list. No empty state is shown because the result could not be verified." onRetry={() => setReload((value) => value + 1)}/>}
-    {queueState === "empty" && <><section className="metrics-grid action-kpis">{statusCards.map(([key, label, Icon]) => <article className="metric-card compact-kpi" key={key}><span className="metric-icon violet"><Icon size={18}/></span><strong>0</strong><span>{label}</span><small>On this API page</small></article>)}</section><EmptyState title="No recommendations yet" message="The API returned no persisted recommendations for this dataset. This page does not generate placeholder actions."/></>}
+    {queueState === "empty" && <><section className="metrics-grid action-kpis">{statusCards.map(([key, label, Icon]) => <article className="metric-card compact-kpi" key={key}><span className="metric-icon violet"><Icon size={18}/></span><strong>{totals[key]}</strong><span>{label}</span><small>Saved for this dataset{learnerFilter ? " and learner" : ""}</small></article>)}</section><EmptyState title={status ? "No matching recommendations" : "No recommendations yet"} message={status ? "No persisted recommendations match this status filter. The summary above shows all saved statuses for this dataset." : "The API returned no persisted recommendations for this dataset. This page does not generate placeholder actions."}/></>}
     {queueState === "populated" && <>
-      <section className="metrics-grid action-kpis">{statusCards.map(([key, label, Icon]) => <article className="metric-card compact-kpi" key={key}><span className="metric-icon violet"><Icon size={18}/></span><strong>{totals[key]}</strong><span>{label}</span><small>On this page</small></article>)}</section>
+      <section className="metrics-grid action-kpis">{statusCards.map(([key, label, Icon]) => <article className="metric-card compact-kpi" key={key}><span className="metric-icon violet"><Icon size={18}/></span><strong>{totals[key]}</strong><span>{label}</span><small>Saved for this dataset{learnerFilter ? " and learner" : ""}</small></article>)}</section>
       <section className="panel action-queue"><div className="panel-heading"><div><h2>Retention action queue</h2><p>Showing this page of {result.total} persisted recommendations. Suggestions require human review.</p></div><select aria-label="Filter recommendation status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All statuses</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
         <div className="action-list">{rows.map((item) => {
           const learnerLabel = item.external_learner_id ?? item.id_student ?? item.learner_id;
@@ -85,7 +88,7 @@ export default function Recommendations() {
               {item.prediction_id && !hasRisk && <small className="action-context">Related prediction: risk context is not included in this API response.</small>}
             </div>
             <span className="action-status">{statusLabels[item.status] || item.status || "Unknown"}</span>
-            {item.learner_id && <Link className="secondary-button" to={`/learners/${encodeURIComponent(item.learner_id)}`}>View learner <ArrowRight size={13}/></Link>}
+            {item.learner_id && <Link className="secondary-button" to={`/learners/${encodeURIComponent(item.learner_id)}?dataset_id=${encodeURIComponent(effectiveDatasetId)}`}>View learner <ArrowRight size={13}/></Link>}
             {canUpdate && item.status === "pending" && <button className="secondary-button" disabled={workingId === item.id} onClick={() => update(item, "in_progress")}>Start review</button>}
             {canUpdate && item.status === "in_progress" && <><button className="primary-button" disabled={workingId === item.id} onClick={() => update(item, "completed")}>Complete</button><button className="secondary-button" disabled={workingId === item.id} onClick={() => update(item, "dismissed")}>Dismiss</button></>}
           </article>;

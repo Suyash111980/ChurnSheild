@@ -2,8 +2,10 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi.security import HTTPAuthorizationCredentials
 
+from app.api.dependencies.auth import bearer_scheme
 from app.api.dependencies.datasets import require_admin_workspace
 from app.repositories import dataset_repository
 from app.schemas.dataset import DatasetPage, DatasetPreview, DatasetRecord
@@ -95,6 +97,27 @@ def get_dataset(
     return record
 
 
+@router.delete("/{dataset_id}", status_code=204)
+def delete_dataset(
+    dataset_id: UUID,
+    user: dict = Depends(require_admin_workspace),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+):
+    """Delete an owned dataset and its FK-cascaded learner/prediction records."""
+    _ensure_database()
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Authentication is required.")
+    try:
+        deleted = dataset_repository.delete_owned_dataset(
+            str(dataset_id), user["id"], user["workspace_id"], credentials.credentials
+        )
+    except Exception as exc:
+        _database_error(exc, "Dataset could not be deleted.")
+    if deleted is None:
+        raise HTTPException(status_code=404, detail="Dataset not found or is currently processing.")
+    return Response(status_code=204)
+
+
 @router.post("/{dataset_id}/retry", status_code=202)
 async def retry_dataset(
     dataset_id: UUID,
@@ -113,7 +136,8 @@ async def retry_dataset(
             dataset_id=str(dataset_id),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail="Only failed datasets can be retried.") from exc
+        detail = "Only failed datasets can be retried." if str(exc) == "dataset_not_retryable" else str(exc)
+        raise HTTPException(status_code=409, detail=detail) from exc
     except Exception as exc:
         _database_error(exc, "Dataset retry could not be processed.")
     if result["data"] is None:
@@ -141,7 +165,11 @@ async def reprocess_dataset(
             allow_reprocess=True,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail="Dataset cannot be reprocessed in its current state.") from exc
+        detail = (
+            "Dataset cannot be reprocessed in its current state."
+            if str(exc) == "dataset_not_retryable" else str(exc)
+        )
+        raise HTTPException(status_code=409, detail=detail) from exc
     except Exception as exc:
         _database_error(exc, "Dataset reprocessing could not be completed.")
     if result["data"] is None:

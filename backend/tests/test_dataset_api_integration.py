@@ -4,21 +4,22 @@ The stateful store is a contract fake: it exercises real routes, parser,
 service orchestration and response schemas without Supabase/PostgREST.
 """
 
+import asyncio
 import csv
 import io
-from threading import Thread
 from types import SimpleNamespace
 from uuid import UUID, uuid4, uuid5
 
 import pytest
 from fastapi import Header
-from fastapi.testclient import TestClient
+import httpx
 
 from app.api.dependencies.datasets import require_admin_workspace
+from app.core.config import settings
 from app.integrations.feature_contract import feature_columns
 from app.integrations.ml_loader import ModelArtifactError
 from app.main import app
-from app.repositories import dataset_repository, prediction_repository
+from app.repositories import dataset_repository, learner_repository, prediction_repository
 from app.services import dataset_service, prediction_service
 
 
@@ -27,6 +28,9 @@ WORKSPACE_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 OWNER_B = "22222222-2222-4222-8222-222222222222"
 WORKSPACE_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 REQUEST_TIMEOUT_SECONDS = 10
+
+# The default Proactor event loop stalls while initializing its self-pipe in
+# this Windows sandbox. Selector policy supports the local ASGITransport tests.
 
 
 def prepared_csv(student_ids=("00123",)) -> bytes:
@@ -87,6 +91,13 @@ class StatefulStore:
             result.append(saved.copy())
         return result
 
+    def dataset_source_keys(self, dataset_id):
+        return {
+            (row["external_learner_id"], row["code_module"], row["code_presentation"])
+            for row in self.learners.values()
+            if row["dataset_id"] == dataset_id
+        }
+
     def upsert_features(self, records):
         for record in records:
             self.features[(record["learner_id"], record["as_of_date"])] = dict(record)
@@ -127,6 +138,7 @@ def api_store(monkeypatch):
     monkeypatch.setattr(dataset_repository, "get_owned_dataset", store.get_owned_dataset)
     monkeypatch.setattr(dataset_repository, "update_owned_dataset", store.update_owned_dataset)
     monkeypatch.setattr(dataset_repository, "upsert_learners", store.upsert_learners)
+    monkeypatch.setattr(dataset_repository, "get_dataset_source_keys", store.dataset_source_keys)
     monkeypatch.setattr(dataset_repository, "upsert_features", store.upsert_features)
     monkeypatch.setattr(dataset_repository, "upsert_predictions", store.upsert_predictions)
     monkeypatch.setattr(
@@ -147,7 +159,7 @@ def api_store(monkeypatch):
         lambda rows: [{**row, "student_name": None} for row in rows],
     )
 
-    def test_workspace(x_test_user: str = Header(...)):
+    async def test_workspace(x_test_user: str = Header(...)):
         workspace = WORKSPACE_A if x_test_user == OWNER_A else WORKSPACE_B
         return {"id": x_test_user, "app_role": "admin", "workspace_id": workspace}
 
@@ -170,27 +182,29 @@ def _upload(client, owner=OWNER_A, *, path="/api/v1/datasets/upload", data=None)
     )
 
 
+class LocalASGIClient:
+    """Use httpx ASGITransport directly, avoiding TestClient's Windows portal socket."""
+
+    async def _async_request(self, method, path, **kwargs):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await asyncio.wait_for(
+                client.request(method, path, **kwargs), timeout=REQUEST_TIMEOUT_SECONDS
+            )
+
+    def request(self, method, path, **kwargs):
+        return asyncio.run(self._async_request(method, path, **kwargs))
+
+    def get(self, path, **kwargs):
+        return self.request("GET", path, **kwargs)
+
+    def post(self, path, **kwargs):
+        return self.request("POST", path, **kwargs)
+
+
 def _bounded_request(request):
-    """Run an in-process ASGI request with a hard test timeout, not a sleep."""
-    result = []
-    error = []
-
-    def run_request():
-        try:
-            result.append(request())
-        except BaseException as exc:
-            error.append(exc)
-
-    worker = Thread(target=run_request, daemon=True)
-    worker.start()
-    worker.join(REQUEST_TIMEOUT_SECONDS)
-    assert not worker.is_alive(), (
-        f"In-process ASGI request exceeded {REQUEST_TIMEOUT_SECONDS} seconds"
-    )
-    if error:
-        raise error[0]
-    assert result, "In-process ASGI request completed without a response"
-    return result[0]
+    """Execute the local ASGI request under its asyncio timeout."""
+    return request()
 
 
 def test_upload_persists_scoped_predictions_and_api_reads_them(api_store, monkeypatch):
@@ -203,7 +217,7 @@ def test_upload_persists_scoped_predictions_and_api_reads_them(api_store, monkey
             for index, _record in enumerate(records)
         ],
     )
-    client = TestClient(app)
+    client = LocalASGIClient()
     uploaded = _bounded_request(lambda: _upload(client))
     assert uploaded.status_code == 201, uploaded.text
     body = uploaded.json()
@@ -245,12 +259,64 @@ def test_upload_persists_scoped_predictions_and_api_reads_them(api_store, monkey
     assert forbidden_predictions.status_code == 404
 
 
+def test_upload_runs_approved_model_and_saves_its_prediction(api_store):
+    """Exercise the real approved artifact through the upload and read APIs."""
+    client = LocalASGIClient()
+    uploaded = _bounded_request(lambda: _upload(client))
+    assert uploaded.status_code == 201, uploaded.text
+    body = uploaded.json()
+    dataset_id = body["data"]["id"]
+    assert body["validation"]["prediction_state"] == "available"
+    assert body["validation"]["predictions_persisted"] == 1
+    assert body["validation"]["prediction_rows_skipped"] == 0
+
+    saved = list(api_store.predictions.values())
+    assert len(saved) == 1
+    assert saved[0]["model_version"] == settings.model_approved_version
+    assert 0.0 <= saved[0]["risk_probability"] <= 1.0
+    assert saved[0]["risk_category"] in {"low", "medium", "high"}
+
+    readback = _bounded_request(lambda: client.get(
+        f"/api/v1/predictions?dataset_id={dataset_id}", headers=_auth_header()
+    ))
+    assert readback.status_code == 200, readback.text
+    assert readback.json()["total"] == 1
+    assert readback.json()["data"][0]["risk_probability"] == saved[0]["risk_probability"]
+
+
+def test_course_insights_api_returns_dataset_scoped_saved_risk(api_store, monkeypatch):
+    dataset = api_store.create_dataset({
+        "owner_id": OWNER_A,
+        "workspace_id": WORKSPACE_A,
+        "dataset_name": "Course test",
+        "filename": "course.csv",
+        "status": "processed",
+        "row_count": 2,
+    })
+    monkeypatch.setattr(learner_repository, "supabase", api_store)
+    monkeypatch.setattr(learner_repository, "list_course_insight_rows", lambda _dataset_id: [
+        {"code_module": "AAA", "code_presentation": "2014J", "latest_risk_probability": 0.8, "latest_risk_category": "high"},
+        {"code_module": "AAA", "code_presentation": "2014J", "latest_risk_probability": 0.2, "latest_risk_category": "low"},
+    ])
+
+    response = _bounded_request(lambda: LocalASGIClient().get(
+        f"/api/v1/courses/insights?dataset_id={dataset['id']}", headers=_auth_header()
+    ))
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["dataset_id"] == dataset["id"]
+    assert body["learner_course_records"] == 2
+    assert body["courses"][0]["high_risk_count"] == 1
+    assert body["courses"][0]["average_risk_probability"] == 0.5
+    assert body["weekly_activity_available"] is False
+
+
 def test_upload_reports_approval_gate_failure_without_prediction(api_store, monkeypatch):
     def approval_disabled(_records, *, record_ids):
         raise ModelArtifactError("inference disabled")
 
     monkeypatch.setattr(dataset_service, "predict_records", approval_disabled)
-    client = TestClient(app)
+    client = LocalASGIClient()
     uploaded = _bounded_request(lambda: _upload(client))
     assert uploaded.status_code == 201, uploaded.text
     assert uploaded.json()["validation"]["prediction_state"] == "unavailable"
@@ -264,7 +330,7 @@ def test_upload_reports_approval_gate_failure_without_prediction(api_store, monk
     assert response.json()["data"] == []
 
 
-def test_reprocessing_identical_file_is_idempotent_and_smaller_file_leaves_stale_rows(api_store, monkeypatch):
+def test_changed_reprocessing_creates_a_new_dataset_and_preserves_original_rows(api_store, monkeypatch):
     def approved(records, *, record_ids):
         return [
             {"record_id": record_ids[index], "model_version": "approved-test-v1", "risk_probability": 0.4,
@@ -273,7 +339,7 @@ def test_reprocessing_identical_file_is_idempotent_and_smaller_file_leaves_stale
         ]
 
     monkeypatch.setattr(dataset_service, "predict_records", approved)
-    client = TestClient(app)
+    client = LocalASGIClient()
     initial = _bounded_request(lambda: client.post(
         "/api/v1/datasets/upload", headers=_auth_header(),
         files={"file": ("prepared.csv", prepared_csv(("00123", "00456")), "text/csv")},
@@ -290,15 +356,23 @@ def test_reprocessing_identical_file_is_idempotent_and_smaller_file_leaves_stale
     assert len(api_store.learners) == 2
     assert len(api_store.predictions) == 2
 
-    smaller = _bounded_request(lambda: client.post(
+    revised = _bounded_request(lambda: client.post(
         route, headers=_auth_header(),
         files={"file": ("prepared.csv", prepared_csv(("00123",)), "text/csv")},
     ))
-    assert smaller.status_code == 202, smaller.text
-    assert len(api_store.learners) == 2
-    assert len(api_store.predictions) == 2
-    readback = _bounded_request(lambda: client.get(
+    assert revised.status_code == 202, revised.text
+    revised_dataset_id = revised.json()["data"]["id"]
+    assert revised_dataset_id != dataset_id
+    assert revised.json()["validation"]["source_revision_created"] is True
+    assert len(api_store.learners) == 3
+    assert len(api_store.predictions) == 3
+    old_readback = _bounded_request(lambda: client.get(
         f"/api/v1/predictions?dataset_id={dataset_id}", headers=_auth_header()
     ))
-    assert readback.status_code == 200
-    assert readback.json()["total"] == 2
+    new_readback = _bounded_request(lambda: client.get(
+        f"/api/v1/predictions?dataset_id={revised_dataset_id}", headers=_auth_header()
+    ))
+    assert old_readback.status_code == 200
+    assert old_readback.json()["total"] == 2
+    assert new_readback.status_code == 200
+    assert new_readback.json()["total"] == 1

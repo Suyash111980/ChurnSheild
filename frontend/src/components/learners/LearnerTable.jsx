@@ -7,6 +7,8 @@ const columns = [
   ["code_presentation", "Presentation"],
   ["highest_education", "Education"],
   ["region", "Region"],
+  ["latest_risk_category", "Saved risk"],
+  ["latest_risk_probability", "Probability"],
 ];
 
 function displayName(learner) {
@@ -19,7 +21,7 @@ function valueOrDash(value) {
   return value == null || value === "" ? "—" : String(value);
 }
 
-export default function LearnerTable({ learners, sort, direction, onSort }) {
+export default function LearnerTable({ learners, sort, direction, onSort, backTo = "/learners" }) {
   return (
     <div className="table-scroll">
       <table className="learner-table api-learner-table">
@@ -47,7 +49,9 @@ export default function LearnerTable({ learners, sort, direction, onSort }) {
               <td>{valueOrDash(learner.code_presentation)}</td>
               <td>{valueOrDash(learner.highest_education)}</td>
               <td>{valueOrDash(learner.region)}</td>
-              <td><Link className="record-link profile-link" to={`/learners/${encodeURIComponent(learner.id)}`}>View profile <ExternalLink size={13} /></Link></td>
+              <td>{learner.latest_risk_category ? <span className={`risk-badge risk-${learner.latest_risk_category}`} title={`Model ${valueOrDash(learner.latest_model_version)}`}>{learner.latest_risk_category}</span> : <span className="prediction-unavailable">No prediction</span>}</td>
+              <td>{learner.latest_risk_probability == null ? "—" : `${(Number(learner.latest_risk_probability) * 100).toFixed(1)}%`}</td>
+              <td><Link className="record-link profile-link" to={`/learners/${encodeURIComponent(learner.id)}?dataset_id=${encodeURIComponent(learner.dataset_id)}`} state={{ from: backTo }}>View profile <ExternalLink size={13} /></Link></td>
             </tr>
           ))}
         </tbody>
