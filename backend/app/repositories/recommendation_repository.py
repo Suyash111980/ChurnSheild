@@ -19,7 +19,8 @@ def list_recommendations(
     if supabase is None:
         raise RuntimeError("database_unavailable")
     query = supabase.table("recommendations").select(
-        "*, learners!inner(dataset_id, external_learner_id, code_module, code_presentation)", count="exact"
+        "*, learners!inner(dataset_id, external_learner_id, code_module, code_presentation), "
+        "predictions(id, learner_id, model_version, risk_probability, risk_category, created_at)", count="exact"
     ).eq("learners.dataset_id", dataset_id)
     for field, value in (
         ("learner_id", learner_id),

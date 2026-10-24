@@ -8,6 +8,7 @@ import PageHeader from "../components/layout/PageHeader";
 import { getLearner } from "../services/learnerService";
 import { useDataset } from "../context/DatasetContext";
 import { buildRiskEvidenceSummary, rankPersistedExplanations, scopeLearnerRecommendations } from "../utils/learnerProfilePresentation";
+import { formatRecommendation } from "../utils/recommendationCopy";
 
 const valueOrDash = (value) => value == null || value === "" ? "—" : String(value);
 const statusLabels = { pending: "Suggested", in_progress: "In progress", completed: "Completed", dismissed: "Dismissed" };
@@ -115,7 +116,8 @@ export default function LearnerProfile() {
       <section className="panel profile-recommendations-panel"><div className="panel-heading"><div><h2>Recommendations and support</h2><p>Persisted actions associated with this learner in the selected dataset.</p></div><Link className="secondary-button" to={`/recommendations?learner_id=${encodeURIComponent(learner.id)}&dataset_id=${encodeURIComponent(effectiveDatasetId)}`}>Open this learner’s queue</Link></div>
         {recommendations.length ? <div className="profile-recommendation-list">{recommendations.map((item) => {
           const currentPrediction = prediction?.id && item.prediction_id === prediction.id;
-          return <article className="profile-recommendation" key={item.id}><div className="profile-recommendation-heading"><strong>{valueOrDash(item.action)}</strong><span className={`action-status profile-status-${item.status || "unknown"}`}>{statusLabels[item.status] || item.status || "Status unavailable"}</span></div><p>{valueOrDash(item.reason)}</p><div className="profile-recommendation-meta"><span>{item.prediction_id ? currentPrediction ? "Related to latest saved prediction" : "Related to another saved prediction" : "Prediction link unavailable"}</span>{item.requires_human_review === true && <span>Human review required</span>}</div></article>;
+          const presentation = formatRecommendation(item);
+          return <article className="profile-recommendation" key={item.id}><div className="profile-recommendation-heading"><strong>{presentation.title}</strong><span className={`action-status profile-status-${item.status || "unknown"}`}>{statusLabels[item.status] || item.status || "Status unavailable"}</span></div><p><strong>Observed reason:</strong> {presentation.reason}</p><p><strong>Suggested action:</strong> {presentation.action}</p><div className="profile-recommendation-meta"><span>Priority: {presentation.priority}</span>{presentation.risk && <span>{presentation.risk} risk{presentation.probability != null ? ` · ${(presentation.probability * 100).toFixed(1)}%` : ""}</span>}<span>{item.prediction_id ? currentPrediction ? "Related to latest saved prediction" : "Related to another saved prediction" : "Prediction link unavailable"}</span>{item.prediction?.model_version && <span>Model {item.prediction.model_version}</span>}{item.requires_human_review === true && <span>Human review required</span>}</div>{presentation.technicalReason && <details className="recommendation-evidence"><summary>Recorded technical evidence</summary><code>{presentation.technicalReason}</code></details>}</article>;
         })}</div> : <div className="profile-unavailable-note"><Clock3 size={17}/><p>No persisted recommendations are associated with this learner in the selected dataset. The Recommendations page can review saved actions; this profile does not generate new records.</p></div>}
       </section>
     </>}

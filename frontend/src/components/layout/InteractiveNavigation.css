@@ -117,3 +117,6 @@
   .profile-dropdown,.notification-backdrop,.notification-drawer,.global-search-results,.global-search-spinner { animation: none; }
   .main-column,.global-search-field,.global-search-result,.sidebar-collapse-toggle { transition: none; }
 }
+
+.nav-list .nav-action { width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.nav-list .nav-action:disabled { cursor: wait; opacity: .75; }

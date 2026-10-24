@@ -287,7 +287,10 @@ def list_recommendations_for_learner(
 
     return (
         supabase.table("recommendations")
-        .select("*, learners!inner(dataset_id)")
+        .select(
+            "*, learners!inner(dataset_id), "
+            "predictions(id, learner_id, model_version, risk_probability, risk_category, created_at)"
+        )
         .eq("learner_id", learner_id)
         .eq("learners.dataset_id", dataset_id)
         .order("created_at", desc=True)

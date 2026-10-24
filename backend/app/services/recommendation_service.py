@@ -26,7 +26,7 @@ def list_recommendations(**filters: Any) -> dict[str, Any]:
     rows = []
     for row in response.data or []:
         learner = row.get("learners") if isinstance(row.get("learners"), dict) else {}
-        item = {key: value for key, value in row.items() if key != "learners"}
+        item = recommendation_to_api_record(row)
         item.update({
             "external_learner_id": learner.get("external_learner_id"),
             "code_module": learner.get("code_module"),
@@ -45,6 +45,26 @@ def list_recommendations(**filters: Any) -> dict[str, Any]:
         "has_more": filters["offset"] + len(rows) < total,
         "status_counts": status_counts,
     }
+
+
+def recommendation_to_api_record(row: dict[str, Any]) -> dict[str, Any]:
+    """Expose prediction context only when it belongs to this saved recommendation's learner."""
+    item = {key: value for key, value in row.items() if key not in {"learners", "predictions"}}
+    prediction = row.get("predictions")
+    if isinstance(prediction, list):
+        prediction = prediction[0] if len(prediction) == 1 else None
+    if (
+        isinstance(prediction, dict)
+        and prediction.get("id") == row.get("prediction_id")
+        and prediction.get("learner_id") == row.get("learner_id")
+    ):
+        item["prediction"] = {
+            key: prediction.get(key)
+            for key in ("id", "model_version", "risk_probability", "risk_category", "created_at")
+        }
+    else:
+        item["prediction"] = None
+    return item
 
 
 def update_status(
