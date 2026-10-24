@@ -8,6 +8,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { getAvatarDetails } from "../../utils/userAvatar";
 import AnimatedLogo from "../common/AnimatedLogo";
+import { logoutAndRedirect } from "../../utils/logoutAndRedirect.js";
 
 const links = [
   ["Dashboard", "/dashboard", LayoutDashboard],
@@ -72,8 +73,7 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse, in
     setLoggingOut(true);
     setLogoutError("");
     try {
-      await logout();
-      navigate("/login", { replace: true });
+      await logoutAndRedirect(logout, navigate);
     } catch {
       setLogoutError("Could not sign out. Please try again.");
     } finally {
@@ -103,7 +103,7 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse, in
       <div className="nav-label account-label">ACCOUNT</div>
       <nav className="nav-list" aria-label="Account">
         {navItem(["Settings", "/settings", Settings])}
-        {accountProfile?.app_role === "admin" && navItem(["Account approvals", "/admin/users", ShieldCheck])}
+        <button type="button" className="nav-link nav-action" onClick={leave} disabled={loggingOut} aria-busy={loggingOut} title={collapsed ? "Log out" : undefined} aria-label={loggingOut ? "Signing out" : "Log out"} data-tooltip="Log out">{loggingOut ? <LoaderCircle className="logout-spinner" size={18} aria-hidden="true" /> : <LogOut size={18} aria-hidden="true" />}<span>{loggingOut ? "Signing out…" : "Log out"}</span></button>
       </nav>
       <div className="sidebar-bottom">
         <div className="plan-card"><div className="plan-icon"><Sparkles size={16} /></div><div><strong>Need a clearer signal?</strong><span>Review the model guide before taking action.</span></div><a href="#guide" onClick={(event) => event.preventDefault()}>Open responsible AI guide <span>→</span></a></div>

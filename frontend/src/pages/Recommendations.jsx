@@ -9,6 +9,7 @@ import LoadingState from "../components/common/LoadingState";
 import ErrorState from "../components/common/ErrorState";
 import EmptyState from "../components/common/EmptyState";
 import { getRecommendationQueueState, getRecommendationStatusCounts } from "../utils/recommendationPresentation";
+import { formatRecommendation } from "../utils/recommendationCopy";
 
 const statusLabels = { pending: "Suggested", in_progress: "In progress", completed: "Completed", dismissed: "Dismissed" };
 const statusCards = [["pending", "Suggested", Lightbulb], ["in_progress", "In progress", Clock3], ["completed", "Completed", CheckCircle2], ["dismissed", "Dismissed", Sparkles]];
@@ -78,14 +79,23 @@ export default function Recommendations() {
         <div className="action-list">{rows.map((item) => {
           const learnerLabel = item.external_learner_id ?? item.id_student ?? item.learner_id;
           const courseLabel = [item.code_module, item.code_presentation].filter(Boolean).join(" · ");
-          const risk = item.risk_category || item.prediction?.risk_category;
-          const hasRisk = ["low", "medium", "high"].includes(String(risk || "").toLowerCase());
+          const presentation = formatRecommendation(item);
+          const risk = presentation.risk;
+          const hasRisk = Boolean(risk);
           return <article className="action-row" key={item.id}>
             <i className={`action-edge ${riskName(risk)}`}/>
-            <div className="action-copy"><strong>{item.action || "Recommendation"}</strong><span>{item.reason || "No supporting rationale was recorded."}</span>
+            <div className="action-copy recommendation-copy">
+              <strong>{presentation.title}</strong>
+              <section><small>Observed reason</small><span>{presentation.reason}</span></section>
+              <section><small>Suggested action</small><span>{presentation.action}</span></section>
               {learnerLabel && <small className="action-context">Learner {learnerLabel}{courseLabel ? ` · ${courseLabel}` : ""}</small>}
-              {hasRisk && <span className={`risk-badge ${riskName(risk)}`}>{String(risk).toLowerCase()} risk context</span>}
-              {item.prediction_id && !hasRisk && <small className="action-context">Related prediction: risk context is not included in this API response.</small>}
+              <div className="recommendation-context">
+                <span className={`recommendation-priority ${riskName(risk)}`}>Priority: {presentation.priority}</span>
+                {hasRisk && <span className={`risk-badge ${riskName(risk)}`}>{risk} risk</span>}
+                {presentation.probability != null && <span>{(presentation.probability * 100).toFixed(1)}% persisted risk probability</span>}
+                {presentation.modelVersion && <span>Model {presentation.modelVersion}</span>}
+              </div>
+              {(presentation.technicalReason || presentation.ruleId) && <details className="recommendation-evidence"><summary>Recorded technical evidence</summary><code>{presentation.technicalReason || presentation.ruleId}</code></details>}
             </div>
             <span className="action-status">{statusLabels[item.status] || item.status || "Unknown"}</span>
             {item.learner_id && <Link className="secondary-button" to={`/learners/${encodeURIComponent(item.learner_id)}?dataset_id=${encodeURIComponent(effectiveDatasetId)}`}>View learner <ArrowRight size={13}/></Link>}

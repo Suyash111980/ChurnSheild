@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import PageHeader from "../components/layout/PageHeader";
 import { deleteDataset, previewDataset, reprocessDataset, retryDataset, uploadDataset } from "../services/datasetService";
-import { submitDatasetRevision } from "../services/datasetServiceCore.js";
+import { confirmAndDeleteDataset, datasetDeletionFeedback, submitDatasetRevision } from "../services/datasetServiceCore.js";
 import { useDataset } from "../context/DatasetContext";
 import { useAuth } from "../context/AuthContext";
 
@@ -17,6 +17,7 @@ export default function DatasetImport({ mode = "default" }) {
   const [error, setError] = useState("");
   const [deleteState, setDeleteState] = useState({ busyId: null, message: "", error: "" });
   const busyRef = useRef(false);
+  const deleteBusyRef = useRef(false);
   const isOulad = mode === "oulad";
   const canUpload = ["admin", "master_admin"].includes(accountProfile?.app_role);
   const previewCanProcess = Boolean(preview?.validation?.descriptive_compatible) && !preview?.validation?.errors?.length;
@@ -88,14 +89,24 @@ export default function DatasetImport({ mode = "default" }) {
     finally { busyRef.current = false; setBusy(false); }
   }
   async function removeDataset(item) {
-    if (!window.confirm(`Delete dataset “${item.dataset_name}”? Its saved learner records, predictions, explanations, and recommendations will be permanently removed together.`)) return;
-    setDeleteState({ busyId: item.id, message: "", error: "" });
+    if (deleteBusyRef.current) return;
+    deleteBusyRef.current = true;
     try {
-      await deleteDataset(item.id);
-      await refresh(datasetId === item.id ? undefined : datasetId);
-      setDeleteState({ busyId: null, message: `Dataset “${item.dataset_name}” and its dependent records were deleted.`, error: "" });
+      const outcome = await confirmAndDeleteDataset({
+        dataset: item,
+        selectedDatasetId: datasetId,
+        confirm: (message) => window.confirm(message),
+        deleteDataset,
+        refresh,
+        onDeleting: () => setDeleteState({ busyId: item.id, message: "", error: "" }),
+      });
+      const feedback = datasetDeletionFeedback(outcome);
+      if (!feedback) return;
+      setDeleteState({ busyId: null, ...feedback });
     } catch (reason) {
       setDeleteState({ busyId: null, message: "", error: reason.message || "Dataset could not be deleted." });
+    } finally {
+      deleteBusyRef.current = false;
     }
   }
   if (!canUpload) return <section className="panel"><h1>Administrator access required</h1><p>Dataset uploads are restricted to administrators.</p></section>;

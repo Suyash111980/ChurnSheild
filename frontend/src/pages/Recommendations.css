@@ -61,3 +61,23 @@
 @media (max-width:760px) { .recommendations-page .page-heading-actions { margin:0 0 12px; } .recommendation-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; } .action-kpi { min-height:86px; padding:12px; gap:10px; } .action-kpi-icon { width:36px; height:36px; } .recommendation-queue-heading { align-items:flex-start; flex-direction:column; padding:16px; } .queue-controls { justify-content:flex-start; width:100%; } .queue-controls label { flex-basis:100%; } .recommendation-queue select { flex:1; min-width:0; } .recommendation-queue .action-list { padding:0 14px; } .recommendation-action-row { grid-template-columns:4px minmax(0,1fr) auto; gap:10px; padding:13px 4px; } .recommendation-action-row .action-copy { grid-column:2/-1; } .recommendation-action-row .risk-badge { grid-column:2; grid-row:2; } .recommendation-action-row .action-status { grid-column:3; grid-row:2; justify-self:end; } .recommendation-action-row .action-review { grid-column:2/4; justify-self:start; grid-row:3; } }
 @media (max-width:420px) { .recommendation-kpis { gap:8px; } .action-kpi { align-items:flex-start; flex-direction:column; min-height:103px; gap:7px; padding:10px; } .action-kpi-icon { width:32px; height:32px; border-radius:9px; } .action-kpi-copy { display:flex; align-items:baseline; flex-wrap:wrap; column-gap:7px; row-gap:2px; } .action-kpi-copy strong { font-size:23px; } .action-kpi-copy>span { font-size:12px; } }
 @media (prefers-reduced-motion:reduce) { .recommendations-page *, .recommendations-page *::before, .recommendations-page *::after { scroll-behavior:auto!important; animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; } }
+
+/* Persisted recommendation cards use the active theme tokens in both light and dark mode. */
+.recommendation-copy { display:grid; gap:10px; min-width:0; }
+.recommendation-copy > strong { color:var(--theme-text-strong, #172033); font-size:16px; line-height:1.35; }
+.recommendation-copy > section { display:grid; gap:3px; }
+.recommendation-copy > section > small { color:var(--theme-muted-soft, #66758b); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+.recommendation-copy > section > span { color:var(--theme-text, #45536a); font-size:13px; line-height:1.55; }
+.recommendation-context { display:flex; align-items:center; flex-wrap:wrap; gap:8px; color:var(--theme-muted, #66758b); font-size:11px; }
+.recommendation-priority { padding:4px 8px; border-radius:999px; background:var(--theme-surface-raised, #edf0f5); color:var(--theme-text, #536178); font-weight:650; }
+.recommendation-priority.high { color:#ff9eaa; background:#482936; }
+.recommendation-priority.medium { color:#f1c36d; background:#44391e; }
+.recommendation-priority.low { color:#75d4bb; background:#173b36; }
+.recommendation-evidence { color:var(--theme-muted, #66758b); font-size:12px; }
+.recommendation-evidence summary { width:max-content; cursor:pointer; color:var(--theme-purple, #6948f5); font-weight:600; }
+.recommendation-evidence code { display:block; margin-top:6px; padding:8px 10px; overflow-wrap:anywhere; white-space:normal; border:1px solid var(--theme-border, #e7ebf2); border-radius:7px; color:var(--theme-muted, #66758b); background:var(--theme-surface-soft, #f7f8fb); font-size:11px; }
+.profile-recommendation > p { line-height:1.55; }
+.profile-recommendation > p > strong { color:var(--theme-text-strong, #344159); }
+.profile-recommendation-meta { flex-wrap:wrap; gap:8px 14px; }
+:root[data-theme="dark"] .recommendation-evidence code { background:var(--theme-surface-soft); }
+@media (max-width:760px) { .recommendation-copy > strong { font-size:15px; } .recommendation-copy > section > span { font-size:12px; } }

@@ -153,6 +153,7 @@ def test_early_warning_exposes_uuid_scope_and_risk_filter_contract():
     }
     assert any(value.get("format") == "uuid" for value in parameters["dataset_id"]["schema"]["anyOf"])
     assert any(value.get("const") == "all" for value in parameters["scope"]["schema"]["anyOf"])
+    assert parameters["limit"]["schema"]["maximum"] == 100
     risk_schema = parameters["risk_category"]["schema"]
     assert any(
         value.get("pattern") == "^(low|medium|high)$"
@@ -264,3 +265,68 @@ def test_early_warning_passes_dataset_id_to_enrichment_queries(monkeypatch):
         == {"clicks": 5}
     )
     assert result["data"][0]["latest_recommendation"]["status"] == "pending"
+
+def test_early_warning_pagination_reaches_all_750_dataset_records_without_duplicates(monkeypatch):
+    rows = []
+    categories = ("high", "medium", "low")
+    for index in range(750):
+        has_prediction = index % 5 != 0
+        rows.append({
+            "id": f"learner-{index}",
+            "dataset_id": DATASET_ID,
+            "external_learner_id": str(index),
+            "code_module": "AAA",
+            "code_presentation": "2014J",
+            "latest_prediction_id": f"prediction-{index}" if has_prediction else None,
+            "latest_risk_category": categories[index % 3] if has_prediction else None,
+            "latest_risk_probability": 0.9 - (index % 90) / 100 if has_prediction else None,
+        })
+
+    class Query:
+        def __init__(self, table_name):
+            self.table_name = table_name
+            self.filters = []
+            self.window = (0, 749)
+
+        def select(self, *_args, **_kwargs): return self
+        def eq(self, key, value): self.filters.append((key, value)); return self
+        def in_(self, key, values): self.filters.append((key, set(values))); return self
+        def order(self, *_args, **_kwargs): return self
+        def limit(self, *_args): return self
+        def range(self, start, end): self.window = (start, end); return self
+
+        def execute(self):
+            source = rows if self.table_name == "learners_latest_prediction" else []
+            selected = list(source)
+            for key, value in self.filters:
+                if isinstance(value, set):
+                    selected = [row for row in selected if row.get(key) in value]
+                else:
+                    selected = [row for row in selected if row.get(key) == value]
+            start, end = self.window
+            return SimpleNamespace(data=selected[start:end + 1], count=len(selected))
+
+    class Database:
+        def table(self, table_name): return Query(table_name)
+
+    database = Database()
+    monkeypatch.setattr(learner_repository, "supabase", database)
+    monkeypatch.setattr(prediction_repository, "supabase", database)
+    monkeypatch.setattr(student_display_service, "get_student_name", lambda _row: None)
+
+    visited = []
+    page_categories = set()
+    for offset in range(0, 750, 100):
+        page = learner_service.get_early_warning_page(
+            dataset_id=DATASET_ID, dataset_ids=None, limit=100, offset=offset
+        )
+        assert page["total"] == 750
+        assert page["offset"] == offset
+        assert page["count"] == min(100, 750 - offset)
+        assert page["has_more"] is (offset + page["count"] < 750)
+        visited.extend(row["id"] for row in page["data"])
+        page_categories.update(row["latest_risk_category"] for row in page["data"])
+
+    assert len(visited) == 750
+    assert len(set(visited)) == 750
+    assert {"high", "medium", "low", None}.issubset(page_categories)

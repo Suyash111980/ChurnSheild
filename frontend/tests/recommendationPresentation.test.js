@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { countRecommendationStatuses, getRecommendationQueueState, getRecommendationStatusCounts } from "../src/utils/recommendationPresentation.js";
+import { formatRecommendation } from "../src/utils/recommendationCopy.js";
 
 const page = (data = [], overrides = {}) => ({
   data,
@@ -75,5 +76,47 @@ describe("persisted recommendation queue presentation", () => {
       { status: "pending" }, { status: "pending" }, { status: "in_progress" },
       { status: "completed" }, { status: "dismissed" }, { status: "unknown" },
     ]), { pending: 2, in_progress: 1, completed: 1, dismissed: 1 });
+  });
+});
+
+
+describe("human-readable persisted recommendation copy", () => {
+  it("translates the saved platform activity rule without claiming disengagement", () => {
+    const result = formatRecommendation(recommendation({
+      action: "technical action", reason: "no_observed_vle_activity_by_cutoff: No VLE activity recorded (observed vle_has_activity_by_cutoff=0)",
+    }));
+    assert.equal(result.title, "Review learner engagement");
+    assert.match(result.reason, /does not by itself establish disengagement/);
+    assert.match(result.action, /Check that the learner can access/);
+    assert.match(result.technicalReason, /^no_observed_vle_activity_by_cutoff:/);
+    const legacy = formatRecommendation(recommendation({
+      rule_id: null,
+      reason: "no_observed_vle_activity_by_cutoff: no activity recorded",
+    }));
+    assert.equal(legacy.title, "Review learner engagement");
+  });
+
+  it("translates assessment evidence without assuming the learner missed it", () => {
+    const result = formatRecommendation(recommendation({
+      rule_id: "assessment_without_submission_recorded_by_cutoff",
+      reason: "assessment_without_submission_recorded_by_cutoff: no submission recorded",
+    }));
+    assert.equal(result.title, "Offer assessment support");
+    assert.match(result.reason, /does not establish whether the learner missed/);
+    assert.match(result.action, /Confirm the assessment status/);
+  });
+
+  it("uses only available risk context and keeps unknown rule data intact", () => {
+    const missing = formatRecommendation(recommendation({ rule_id: "unknown_rule", prediction: null }));
+    assert.equal(missing.priority, "Unavailable");
+    assert.equal(missing.probability, null);
+    assert.equal(missing.title, "Offer a supportive check-in");
+    const saved = formatRecommendation(recommendation({
+      prediction: { risk_category: "high", risk_probability: 0.73, model_version: "rf-v1" },
+    }));
+    assert.equal(saved.priority, "High");
+    assert.equal(saved.probability, 0.73);
+    assert.equal(saved.modelVersion, "rf-v1");
+    assert.equal(formatRecommendation(recommendation({ prediction: { risk_probability: 1.3 } })).probability, null);
   });
 });

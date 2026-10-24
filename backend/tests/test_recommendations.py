@@ -74,6 +74,10 @@ def test_recommendations_are_paginated_and_filterable(monkeypatch):
             "dataset_id": DATASET_ID, "external_learner_id": "00123",
             "code_module": "AAA", "code_presentation": "2014J",
         },
+        "predictions": {
+            "id": "prediction-uuid", "learner_id": "learner-uuid", "model_version": "rf-v1",
+            "risk_probability": 0.73, "risk_category": "high", "created_at": "2026-01-01T00:00:00Z",
+        },
     }])
     monkeypatch.setattr(recommendation_repository, "supabase", fake)
     monkeypatch.setattr(
@@ -91,6 +95,7 @@ def test_recommendations_are_paginated_and_filterable(monkeypatch):
 
     assert response.status_code == 200
     assert "learners!inner" in fake.selected
+    assert "predictions(" in fake.selected
     assert response.json()["count"] == 1
     assert response.json()["status_counts"] == {
         "pending": 8, "in_progress": 2, "completed": 1, "dismissed": 0,
@@ -98,10 +103,59 @@ def test_recommendations_are_paginated_and_filterable(monkeypatch):
     assert response.json()["data"][0]["external_learner_id"] == "00123"
     assert response.json()["data"][0]["code_module"] == "AAA"
     assert "learners" not in response.json()["data"][0]
+    assert response.json()["data"][0]["prediction"] == {
+        "id": "prediction-uuid", "model_version": "rf-v1", "risk_probability": 0.73,
+        "risk_category": "high", "created_at": "2026-01-01T00:00:00Z",
+    }
     assert fake.filters[0] == ("learners.dataset_id", DATASET_ID)
     assert fake.filters[1][0] == "learner_id"
     assert fake.filters[2] == ("status", "pending")
     assert fake.requested_range == (5, 14)
+
+
+def test_repository_reads_saved_rows_with_dataset_filter_and_pagination(monkeypatch):
+    row = {
+        "id": RECOMMENDATION_ID, "learner_id": "learner-1", "prediction_id": "prediction-1",
+        "rule_id": "no_observed_vle_activity_by_cutoff", "action": "Check access",
+        "reason": "Persisted technical evidence", "status": "pending",
+    }
+    fake = FakeRecommendationQuery([row])
+    monkeypatch.setattr(recommendation_repository, "supabase", fake)
+
+    result = recommendation_repository.list_recommendations(
+        dataset_id=DATASET_ID, limit=10, offset=20, learner_id="learner-1",
+        prediction_id="prediction-1", recommendation_status="pending",
+    )
+
+    assert result.data == [row]
+    assert fake.filters == [
+        ("learners.dataset_id", DATASET_ID), ("learner_id", "learner-1"),
+        ("prediction_id", "prediction-1"), ("status", "pending"),
+    ]
+    assert fake.requested_range == (20, 29)
+    assert "predictions(" in fake.selected
+
+
+def test_service_returns_persisted_recommendation_and_matching_prediction_context(monkeypatch):
+    row = {
+        "id": RECOMMENDATION_ID, "learner_id": "learner-1", "prediction_id": "prediction-1",
+        "rule_id": "no_observed_vle_activity_by_cutoff", "action": "Check access",
+        "reason": "Persisted technical evidence", "status": "pending",
+        "learners": {"external_learner_id": "student-001", "code_module": "AAA", "code_presentation": "2014J"},
+        "predictions": {"id": "prediction-1", "learner_id": "learner-1", "risk_category": "high",
+                        "risk_probability": 0.8, "model_version": "rf-v1"},
+    }
+    monkeypatch.setattr(recommendation_repository, "list_recommendations", lambda **_filters: SimpleNamespace(data=[row], count=1))
+    monkeypatch.setattr(recommendation_repository, "count_recommendations_by_status", lambda **_filters: {
+        "pending": 1, "in_progress": 0, "completed": 0, "dismissed": 0,
+    })
+
+    result = recommendation_service.list_recommendations(dataset_id=DATASET_ID, limit=1, offset=0)
+
+    assert result["total"] == 1 and result["has_more"] is False
+    assert result["data"][0]["reason"] == "Persisted technical evidence"
+    assert result["data"][0]["external_learner_id"] == "student-001"
+    assert result["data"][0]["prediction"]["risk_category"] == "high"
 
 
 def test_status_count_query_is_dataset_scoped_and_ignores_pagination_and_status_filter(monkeypatch):
@@ -303,3 +357,29 @@ def test_same_recommendation_status_is_idempotent(monkeypatch):
     )
 
     assert recommendation_service.update_status(RECOMMENDATION_ID, DATASET_ID, "completed") == current
+
+
+def test_prediction_context_is_omitted_when_it_does_not_match_saved_recommendation():
+    item = recommendation_service.recommendation_to_api_record({
+        "id": RECOMMENDATION_ID,
+        "learner_id": "learner-1",
+        "prediction_id": "prediction-1",
+        "predictions": {
+            "id": "prediction-1", "learner_id": "different-learner", "risk_category": "high",
+            "risk_probability": 0.9, "model_version": "model-x",
+        },
+    })
+    assert item["prediction"] is None
+    assert "predictions" not in item
+
+
+def test_prediction_context_is_omitted_when_the_prediction_id_does_not_match():
+    item = recommendation_service.recommendation_to_api_record({
+        "id": RECOMMENDATION_ID,
+        "learner_id": "learner-1",
+        "prediction_id": "prediction-1",
+        "predictions": {
+            "id": "another-prediction", "learner_id": "learner-1", "risk_category": "high",
+        },
+    })
+    assert item["prediction"] is None

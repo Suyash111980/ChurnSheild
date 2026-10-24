@@ -1,4 +1,4 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -78,9 +78,11 @@ def test_list_route_openapi_keeps_dataset_id_uuid_typed_and_scope_explicit():
 
 
 def test_dataset_delete_uses_owner_workspace_and_request_jwt_and_hides_other_workspace(monkeypatch):
+    processing_id = str(uuid4())
     rows = {
         DATASET_A: {"owner_id": OWNER, "workspace_id": WORKSPACE, "status": "processed", "learners": 2, "predictions": 2, "explanations": 1, "recommendations": 1},
         DATASET_B: {"owner_id": "22222222-2222-4222-8222-222222222222", "workspace_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "status": "processed", "learners": 1},
+        processing_id: {"owner_id": OWNER, "workspace_id": WORKSPACE, "status": "processing"},
     }
     calls = []
 
@@ -102,24 +104,140 @@ def test_dataset_delete_uses_owner_workspace_and_request_jwt_and_hides_other_wor
         delete_dataset(dataset_id=DATASET_B, user=USER, credentials=token)
     assert forged.value.status_code == 404
     assert DATASET_B in rows
+    with pytest.raises(HTTPException) as still_processing:
+        delete_dataset(dataset_id=processing_id, user=USER, credentials=token)
+    assert still_processing.value.status_code == 404
+    assert processing_id in rows
     assert calls[0] == (DATASET_A, OWNER, WORKSPACE, "synthetic-jwt")
+
+
+def test_dataset_preview_and_detail_routes_have_distinct_uuid_api_contracts():
+    from app.main import app
+
+    routes = app.openapi()["paths"]
+    assert "/api/v1/datasets/preview" in routes
+    assert "post" in routes["/api/v1/datasets/preview"]
+    detail = routes["/api/v1/datasets/{dataset_id}"]
+    assert "get" in detail and "delete" in detail
+    path_id = next(
+        param for param in detail["delete"]["parameters"]
+        if param["name"] == "dataset_id"
+    )
+    assert path_id["in"] == "path"
+    assert path_id["schema"]["format"] == "uuid"
+    with pytest.raises(ValueError):
+        UUID("not-a-uuid")
 
 
 def test_delete_policy_migration_is_workspace_scoped_and_cascade_is_existing_schema():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[2]
-    delete_policy = (root / "database" / "migrations" / "008_dataset_delete_policy.sql").read_text().lower()
-    initial = (root / "database" / "migrations" / "001_initial_schema.sql").read_text().lower()
-    ownership = (root / "database" / "migrations" / "005_dataset_ownership.sql").read_text().lower()
+    migrations = root / "database" / "migrations"
+    delete_policy = (migrations / "008_dataset_delete_policy.sql").read_text().lower()
+    initial = (migrations / "001_initial_schema.sql").read_text().lower()
+    ownership = (migrations / "005_dataset_ownership.sql").read_text().lower()
+    workspaces = (migrations / "006_master_admin_workspaces.sql").read_text().lower()
+
+    # Earlier migrations establish read/write rules only; migration 008 is the
+    # explicit RLS permission required for authenticated DELETE requests.
+    for earlier in (initial, ownership, workspaces):
+        assert "create policy dataset_uploads_delete_owner" not in earlier
+        assert "for delete to authenticated" not in earlier
+    assert "drop policy if exists dataset_uploads_delete_owner" in delete_policy
+    assert "create policy dataset_uploads_delete_owner on public.dataset_uploads" in delete_policy
     assert "for delete to authenticated using" in delete_policy
     assert "owner_id = (select auth.uid())" in delete_policy
+    assert "workspace_id is not null" in delete_policy
+    assert "w.admin_user_id = (select auth.uid())" in delete_policy
     assert "w.status = 'active'" in delete_policy
+    assert "p.role = 'admin'" in delete_policy
     assert "p.approval_status = 'approved'" in delete_policy
     assert "status <> 'processing'" in delete_policy
+    assert "grant delete on table public.dataset_uploads to authenticated" in delete_policy
+    assert "grant select (id) on table public.dataset_uploads to authenticated" in delete_policy
+    assert delete_policy.index("begin;") < delete_policy.index("drop policy") < delete_policy.index("commit;")
+
+    # Dataset -> learner -> feature/prediction/recommendation cascades, and
+    # prediction -> explanation cascades are supplied by the existing schema.
+    assert "references public.dataset_uploads(id) on delete cascade" in ownership
     assert "learner_id uuid not null references public.learners(id) on delete cascade" in initial
     assert "prediction_id uuid not null references public.predictions(id) on delete cascade" in initial
-    assert "references public.dataset_uploads(id) on delete cascade" in ownership
+    assert "references public.learners(id) on delete cascade" in initial
+    assert "prediction_id uuid references public.predictions(id) on delete set null" in initial
+
+
+@pytest.mark.parametrize(
+    ("diagnostic_rows", "expected_reason"),
+    [([], "not_found_or_scope_mismatch"), ([{"status": "processing"}], "processing"),
+     ([{"status": "processed"}], "policy_denied_or_concurrent_change")],
+)
+def test_delete_repository_logs_safe_reason_when_no_row_is_deleted(
+    monkeypatch, caplog, diagnostic_rows, expected_reason
+):
+    import supabase as supabase_module
+    from app.core.config import settings
+
+    class Query:
+        def __init__(self):
+            self.is_delete = False
+        def delete(self):
+            self.is_delete = True
+            return self
+        def eq(self, *_args): return self
+        def neq(self, *_args): return self
+        def select(self, *_args): return self
+        def limit(self, *_args): return self
+        def execute(self):
+            rows = [] if self.is_delete else diagnostic_rows
+            return type("Response", (), {"data": rows})()
+
+    class Client:
+        class Postgrest:
+            def auth(self, _token): pass
+        postgrest = Postgrest()
+        def table(self, _name): return Query()
+
+    caplog.set_level("INFO", logger="app.repositories.dataset_repository")
+    monkeypatch.setattr(settings, "supabase_url", "https://project.example")
+    monkeypatch.setattr(settings, "supabase_publishable_key", "publishable-test-key")
+    monkeypatch.setattr(supabase_module, "create_client", lambda *_args: Client())
+    monkeypatch.setattr(dataset_repository, "supabase", Client())
+
+    assert dataset_repository.delete_owned_dataset(
+        DATASET_A, OWNER, WORKSPACE, "synthetic-jwt-never-log"
+    ) is None
+    assert f"reason={expected_reason}" in caplog.text
+    assert DATASET_A not in caplog.text
+    assert OWNER not in caplog.text
+    assert WORKSPACE not in caplog.text
+    assert "synthetic-jwt-never-log" not in caplog.text
+
+
+def test_delete_route_requires_a_bearer_token(monkeypatch):
+    monkeypatch.setattr(dataset_repository, "supabase", object())
+    monkeypatch.setattr(
+        dataset_repository,
+        "delete_owned_dataset",
+        lambda *_args: pytest.fail("delete must not run without a bearer token"),
+    )
+    with pytest.raises(HTTPException) as missing_token:
+        delete_dataset(dataset_id=DATASET_A, user=USER, credentials=None)
+    assert missing_token.value.status_code == 401
+
+
+def test_delete_route_does_not_return_success_when_database_delete_fails(monkeypatch):
+    monkeypatch.setattr(dataset_repository, "supabase", object())
+    monkeypatch.setattr(
+        dataset_repository,
+        "delete_owned_dataset",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("database failure")),
+    )
+    token = HTTPAuthorizationCredentials(scheme="Bearer", credentials="synthetic-jwt")
+    with pytest.raises(HTTPException) as failed_delete:
+        delete_dataset(dataset_id=DATASET_A, user=USER, credentials=token)
+    assert failed_delete.value.status_code == 500
+    assert failed_delete.value.detail == "Dataset could not be deleted."
 
 
 def test_delete_repository_uses_publishable_client_and_authenticated_user_jwt(monkeypatch):
