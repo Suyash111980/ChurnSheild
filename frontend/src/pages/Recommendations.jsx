@@ -25,6 +25,7 @@ export default function Recommendations() {
   const [request, setRequest] = useState({ datasetId: null, result: null, error: null, loading: false });
   const [reload, setReload] = useState(0);
   const [status, setStatus] = useState("");
+  const [risk, setRisk] = useState("");
   const [workingId, setWorkingId] = useState(null);
   const [updateError, setUpdateError] = useState(null);
   const [offset, setOffset] = useState(0);
@@ -32,13 +33,13 @@ export default function Recommendations() {
     if (!effectiveDatasetId) { setRequest({ datasetId: null, result: null, error: null, loading: false }); return () => {}; }
     const controller = new AbortController();
     setRequest({ datasetId: effectiveDatasetId, result: null, error: null, loading: true });
-    getRecommendations({ dataset_id: effectiveDatasetId, ...(learnerFilter ? { learner_id: learnerFilter } : {}), ...(status ? { status } : {}), limit: 20, offset }, { signal: controller.signal })
+    getRecommendations({ dataset_id: effectiveDatasetId, ...(learnerFilter ? { learner_id: learnerFilter } : {}), ...(status ? { status } : {}), ...(risk ? { risk_level: risk } : {}), limit: 20, offset }, { signal: controller.signal })
       .then((result) => setRequest({ datasetId: effectiveDatasetId, result, error: null, loading: false }))
       .catch((error) => { if (error.name !== "AbortError") setRequest({ datasetId: effectiveDatasetId, result: null, error, loading: false }); });
     return () => controller.abort();
-  }, [effectiveDatasetId, learnerFilter, status, offset]);
+  }, [effectiveDatasetId, learnerFilter, status, risk, offset]);
   useEffect(() => { setUpdateError(null); setOffset(0); setStatus(""); }, [effectiveDatasetId, learnerFilter]);
-  useEffect(() => { setOffset(0); }, [status]);
+  useEffect(() => { setOffset(0); }, [status, risk]);
   useEffect(() => load(), [load, reload]);
   const current = request.datasetId === effectiveDatasetId;
   const result = current ? request.result : null;
@@ -75,7 +76,7 @@ export default function Recommendations() {
     {queueState === "empty" && <><section className="metrics-grid action-kpis">{statusCards.map(([key, label, Icon]) => <article className="metric-card compact-kpi" key={key}><span className="metric-icon violet"><Icon size={18}/></span><strong>{totals[key]}</strong><span>{label}</span><small>Saved for this dataset{learnerFilter ? " and learner" : ""}</small></article>)}</section><EmptyState title={status ? "No matching recommendations" : "No recommendations yet"} message={status ? "No persisted recommendations match this status filter. The summary above shows all saved statuses for this dataset." : "The API returned no persisted recommendations for this dataset. This page does not generate placeholder actions."}/></>}
     {queueState === "populated" && <>
       <section className="metrics-grid action-kpis">{statusCards.map(([key, label, Icon]) => <article className="metric-card compact-kpi" key={key}><span className="metric-icon violet"><Icon size={18}/></span><strong>{totals[key]}</strong><span>{label}</span><small>Saved for this dataset{learnerFilter ? " and learner" : ""}</small></article>)}</section>
-      <section className="panel action-queue"><div className="panel-heading"><div><h2>Retention action queue</h2><p>Showing this page of {result.total} persisted recommendations. Suggestions require human review.</p></div><select aria-label="Filter recommendation status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All statuses</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
+      <section className="panel action-queue"><div className="panel-heading"><div><h2>Retention action queue</h2><p>Showing this page of {result.total} persisted recommendations. Suggestions require human review.</p></div><div className="recommendation-filters"><select aria-label="Filter recommendation status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All statuses</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><select aria-label="Filter recommendation risk level" value={risk} onChange={(event) => setRisk(event.target.value)}><option value="">All risk levels</option><option value="low">Low risk</option><option value="medium">Medium risk</option><option value="high">High risk</option></select></div></div>
         <div className="action-list">{rows.map((item) => {
           const learnerLabel = item.external_learner_id ?? item.id_student ?? item.learner_id;
           const courseLabel = [item.code_module, item.code_presentation].filter(Boolean).join(" · ");

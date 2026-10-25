@@ -1,1 +1,0 @@
-`Purple Shield Refresh Icon.png` is the original supplied logo and remains unchanged. The two `churnshield-*-mask.png` files are monochrome alpha masks derived from its existing purple and lavender pixels; they are only used to stage CSS reveals. All logo color pixels are rendered from the original PNG.

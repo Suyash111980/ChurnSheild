@@ -378,6 +378,27 @@ def test_profile_service_outage_is_service_unavailable(auth_setup, monkeypatch):
     assert "internal database diagnostic" not in error.value.detail
 
 
+def test_profile_lookup_logs_numeric_http_error_code_without_details(
+    auth_setup, monkeypatch, caplog
+):
+    private_key, _ = auth_setup
+
+    class UnauthorizedProviderError(RuntimeError):
+        code = 401
+
+    class BrokenProfileQuery:
+        def table(self, _table_name):
+            raise UnauthorizedProviderError("credential-bearing provider detail")
+
+    monkeypatch.setattr(auth, "supabase", BrokenProfileQuery())
+    with pytest.raises(HTTPException) as error:
+        auth.get_current_user(credentials(make_token(private_key)))
+
+    assert error.value.status_code == 503
+    assert "error_code=401" in caplog.text
+    assert "credential-bearing provider detail" not in caplog.text
+
+
 def test_role_dependency_allows_or_denies_as_configured():
     user = {"id": SUBJECT, "database_role": "admin", "app_role": "admin"}
     assert auth.require_roles("admin")(current_user=user) == user

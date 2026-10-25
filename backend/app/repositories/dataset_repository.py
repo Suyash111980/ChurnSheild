@@ -1,7 +1,8 @@
-
 """Supabase persistence for private datasets and their learner records."""
 
 import logging
+import re
+from typing import Any
 
 from app.integrations.supabase_client import supabase
 
@@ -13,6 +14,17 @@ DATASET_COLUMNS = (
     "processing_progress, processed_at, error_summary, validation_results"
 )
 
+RECOMMENDATION_COLUMNS = (
+    "id, learner_id, prediction_id, rule_id, action, reason, "
+    "status, created_at, updated_at"
+)
+
+RECOMMENDATION_READBACK_COLUMNS = (
+    f"{RECOMMENDATION_COLUMNS}, learners!inner(id, dataset_id)"
+)
+
+RECOMMENDATION_CHUNK_SIZE = 100
+
 
 def _client():
     if supabase is None:
@@ -23,27 +35,41 @@ def _client():
 def _log_database_error(operation: str, exc: Exception) -> None:
     """Log safe diagnostic metadata without dumping request or credential data."""
     error_code = getattr(exc, "code", None)
-    if not isinstance(error_code, (str, int)):
+
+    if isinstance(error_code, int) and not isinstance(error_code, bool):
+        error_code = str(error_code)
+
+    if (
+        not isinstance(error_code, str)
+        or not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", error_code)
+    ):
         error_code = "unavailable"
 
     logger.warning(
-        "Recommendation persistence %s failed "
+        "Database operation %s failed "
         "(exception_type=%s, error_code=%s)",
         operation,
         type(exc).__name__,
-        str(error_code)[:80],
+        error_code,
     )
 
 
 def create_dataset(payload: dict):
-    response = _client().table("dataset_uploads").insert(payload).select(DATASET_COLUMNS).execute()
+    response = (
+        _client()
+        .table("dataset_uploads")
+        .insert(payload)
+        .select(DATASET_COLUMNS)
+        .execute()
+    )
     rows = response.data or []
     return rows[0] if rows else None
 
 
 def get_workspace_for_admin(owner_id: str):
     response = (
-        _client().table("workspaces")
+        _client()
+        .table("workspaces")
         .select("id, admin_user_id, status")
         .eq("admin_user_id", owner_id)
         .limit(1)
@@ -55,7 +81,8 @@ def get_workspace_for_admin(owner_id: str):
 
 def get_owned_dataset(dataset_id: str, owner_id: str, workspace_id: str):
     response = (
-        _client().table("dataset_uploads")
+        _client()
+        .table("dataset_uploads")
         .select(DATASET_COLUMNS)
         .eq("id", dataset_id)
         .eq("owner_id", owner_id)
@@ -67,9 +94,16 @@ def get_owned_dataset(dataset_id: str, owner_id: str, workspace_id: str):
     return rows[0] if rows else None
 
 
-def list_owned_datasets(*, owner_id: str, workspace_id: str, limit: int, offset: int):
+def list_owned_datasets(
+    *,
+    owner_id: str,
+    workspace_id: str,
+    limit: int,
+    offset: int,
+):
     return (
-        _client().table("dataset_uploads")
+        _client()
+        .table("dataset_uploads")
         .select(DATASET_COLUMNS, count="exact")
         .eq("owner_id", owner_id)
         .eq("workspace_id", workspace_id)
@@ -116,7 +150,8 @@ def get_dashboard_summaries(dataset_ids: list[str]) -> list[dict]:
 
 def update_owned_dataset(dataset_id: str, owner_id: str, workspace_id: str, updates: dict):
     response = (
-        _client().table("dataset_uploads")
+        _client()
+        .table("dataset_uploads")
         .update(updates)
         .eq("id", dataset_id)
         .eq("owner_id", owner_id)
@@ -184,13 +219,21 @@ def delete_owned_dataset(dataset_id: str, owner_id: str, workspace_id: str, acce
 def upsert_learners(records: list[dict]) -> list[dict]:
     if not records:
         return []
+
     response = (
-        _client().table("learners")
+        _client()
+        .table("learners")
         .upsert(
             records,
-            on_conflict="dataset_id,external_learner_id,code_module,code_presentation",
+            on_conflict=(
+                "dataset_id,external_learner_id,"
+                "code_module,code_presentation"
+            ),
         )
-        .select("id, dataset_id, external_learner_id, code_module, code_presentation")
+        .select(
+            "id, dataset_id, external_learner_id, "
+            "code_module, code_presentation"
+        )
         .execute()
     )
     return response.data or []
@@ -230,71 +273,90 @@ def get_dataset_source_keys(dataset_id: str) -> set[tuple[str, str, str]]:
 
 
 def upsert_features(records: list[dict]) -> None:
-    if records:
-        (
-            _client().table("learner_features")
-            .upsert(records, on_conflict="learner_id,as_of_date")
-            .execute()
-        )
+    if not records:
+        return
+
+    (
+        _client()
+        .table("learner_features")
+        .upsert(records, on_conflict="learner_id,as_of_date")
+        .execute()
+    )
 
 
 def upsert_predictions(records: list[dict]) -> list[dict]:
-    """Persist the current model result once per learner and model version.
-
-    The database must have a matching unique index for this conflict target.
-    Reprocessing the same dataset replaces the prior score.
-    """
+    """Persist one current model result per learner and model version."""
     if not records:
         return []
+
     response = (
-        _client().table("predictions")
+        _client()
+        .table("predictions")
         .upsert(records, on_conflict="learner_id,model_version")
-        .select("id, learner_id, model_version, risk_probability, risk_category, created_at")
+        .select(
+            "id, learner_id, model_version, risk_probability, "
+            "risk_category, created_at"
+        )
         .execute()
     )
     return response.data or []
 
 
 def upsert_explanations(records: list[dict]) -> list[dict]:
-    """Upsert explanation evidence on the schema's prediction/feature key."""
+    """Upsert explanation evidence on the prediction/feature key."""
     if not records:
         return []
+
     response = (
-        _client().table("risk_explanations")
+        _client()
+        .table("risk_explanations")
         .upsert(records, on_conflict="prediction_id,feature_name")
-        .select("id, prediction_id, feature_name, feature_value, contribution")
+        .select(
+            "id, prediction_id, feature_name, "
+            "feature_value, contribution"
+        )
         .execute()
     )
     return response.data or []
 
 
+def _valid_nonempty_string(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _recommendation_key(record: dict) -> tuple[str, str]:
+    return record["prediction_id"], record["rule_id"]
+
+
 def upsert_recommendations(records: list[dict], *, dataset_id: str) -> dict:
-    """Persist rule recommendations and confirm their dataset association.
+    """Persist recommendations and verify their learner/dataset association.
 
     Requires a unique conflict target on (prediction_id, rule_id).
-    Readback confirms that each candidate exists and belongs to the expected
-    learner and dataset. Failures are counted and logged without exposing
-    recommendation content or database credentials.
+    Duplicate input keys with conflicting recommendation content are rejected.
+    Database errors are logged without exposing credentials or row contents.
     """
     if not records:
         return {"persisted": [], "failed_count": 0}
 
     client = _client()
-    persisted = []
+    persisted: list[dict] = []
     failed_count = 0
-    chunk_size = 250
 
     unique_records: dict[tuple[str, str], dict] = {}
     invalid_keys: set[tuple[str, str]] = set()
     invalid_count = 0
 
     for record in records:
+        if not isinstance(record, dict):
+            invalid_count += 1
+            continue
+
         prediction_id = record.get("prediction_id")
         rule_id = record.get("rule_id")
         learner_id = record.get("learner_id")
 
         if not all(
-            isinstance(value, str) and value.strip()
+            _valid_nonempty_string(value)
             for value in (prediction_id, rule_id, learner_id)
         ):
             invalid_count += 1
@@ -303,14 +365,15 @@ def upsert_recommendations(records: list[dict], *, dataset_id: str) -> dict:
         key = (prediction_id, rule_id)
         previous = unique_records.get(key)
 
-        if previous is not None and any(
-            previous.get(field) != record.get(field)
-            for field in ("learner_id", "action", "reason")
-        ):
-            invalid_keys.add(key)
+        if previous is not None:
+            if any(
+                previous.get(field) != record.get(field)
+                for field in ("learner_id", "action", "reason")
+            ):
+                invalid_keys.add(key)
             continue
 
-        unique_records.setdefault(key, record)
+        unique_records[key] = record
 
     failed_count += invalid_count + len(invalid_keys)
 
@@ -319,12 +382,16 @@ def upsert_recommendations(records: list[dict], *, dataset_id: str) -> dict:
 
     candidates = list(unique_records.values())
 
-    for offset in range(0, len(candidates), chunk_size):
-        batch = candidates[offset:offset + chunk_size]
-        prediction_ids = list(
-            dict.fromkeys(record["prediction_id"] for record in batch)
-        )
-        rule_ids = list(dict.fromkeys(record["rule_id"] for record in batch))
+    logger.info(
+        "Recommendation persistence starting "
+        "(input=%d, valid_unique=%d, invalid=%d)",
+        len(records),
+        len(candidates),
+        invalid_count + len(invalid_keys),
+    )
+
+    for offset in range(0, len(candidates), RECOMMENDATION_CHUNK_SIZE):
+        batch = candidates[offset : offset + RECOMMENDATION_CHUNK_SIZE]
 
         try:
             (
@@ -337,31 +404,35 @@ def upsert_recommendations(records: list[dict], *, dataset_id: str) -> dict:
                 .execute()
             )
         except Exception as exc:
-            _log_database_error("upsert", exc)
+            _log_database_error("recommendation_upsert", exc)
             failed_count += len(batch)
             continue
 
+        expected = {
+            _recommendation_key(record): record
+            for record in batch
+        }
+        prediction_ids = list(
+            dict.fromkeys(record["prediction_id"] for record in batch)
+        )
+        rule_ids = list(dict.fromkeys(record["rule_id"] for record in batch))
+
+        # Keep the readback query compatible with the repository's batch
+        # query contract, then validate each exact (prediction_id, rule_id).
         try:
             response = (
                 client.table("recommendations")
-                .select(
-                    "id, learner_id, prediction_id, rule_id, action, reason, status, "
-                    "created_at, updated_at, learners!inner(id, dataset_id)"
-                )
+                .select(RECOMMENDATION_READBACK_COLUMNS)
                 .in_("prediction_id", prediction_ids)
                 .in_("rule_id", rule_ids)
                 .eq("learners.dataset_id", dataset_id)
                 .execute()
             )
         except Exception as exc:
-            _log_database_error("readback", exc)
+            _log_database_error("recommendation_readback", exc)
             failed_count += len(batch)
             continue
 
-        expected = {
-            (record["prediction_id"], record["rule_id"]): record
-            for record in batch
-        }
         matches: dict[tuple[str, str], dict] = {}
         invalid_readback: set[tuple[str, str]] = set()
 
@@ -377,20 +448,21 @@ def upsert_recommendations(records: list[dict], *, dataset_id: str) -> dict:
 
             key = (prediction_id, rule_id)
             candidate = expected.get(key)
-            learner = row.get("learners")
 
+            # Rows returned by the two IN filters may include combinations
+            # not present in the input batch. Ignore those unrelated rows.
+            if candidate is None:
+                continue
+
+            learner = row.get("learners")
             if (
-                candidate is None
-                or row.get("learner_id") != candidate["learner_id"]
+                row.get("learner_id") != candidate["learner_id"]
                 or not isinstance(learner, dict)
                 or learner.get("id") != candidate["learner_id"]
                 or str(learner.get("dataset_id")) != str(dataset_id)
             ):
-                if candidate is not None:
-                    invalid_readback.add(key)
-                continue
-
-            if key in invalid_readback:
+                invalid_readback.add(key)
+                matches.pop(key, None)
                 continue
 
             if key in matches:
@@ -418,7 +490,8 @@ def upsert_recommendations(records: list[dict], *, dataset_id: str) -> dict:
 
     logger.info(
         "Recommendation persistence finished "
-        "(candidates=%d, persisted=%d, failed=%d)",
+        "(input=%d, valid_unique=%d, persisted=%d, failed=%d)",
+        len(records),
         len(candidates),
         len(persisted),
         failed_count,
@@ -429,7 +502,8 @@ def upsert_recommendations(records: list[dict], *, dataset_id: str) -> dict:
 
 def get_dashboard_summary(dataset_id: str):
     response = (
-        _client().table("dataset_dashboard_summary")
+        _client()
+        .table("dataset_dashboard_summary")
         .select("*")
         .eq("dataset_id", dataset_id)
         .limit(1)

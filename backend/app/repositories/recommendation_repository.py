@@ -1,3 +1,4 @@
+
 """Supabase data access for existing recommendation records."""
 
 from typing import Any
@@ -15,13 +16,30 @@ def list_recommendations(
     learner_id: str | None = None,
     prediction_id: str | None = None,
     recommendation_status: str | None = None,
+    risk_level: str | None = None,
 ):
     if supabase is None:
         raise RuntimeError("database_unavailable")
-    query = supabase.table("recommendations").select(
-        "*, learners!inner(dataset_id, external_learner_id, code_module, code_presentation), "
-        "predictions(id, learner_id, model_version, risk_probability, risk_category, created_at)", count="exact"
-    ).eq("learners.dataset_id", dataset_id)
+
+    prediction_relation = (
+        "predictions!inner(id, learner_id, model_version, risk_probability, "
+        "risk_category, created_at)"
+        if risk_level is not None
+        else "predictions(id, learner_id, model_version, risk_probability, "
+        "risk_category, created_at)"
+    )
+
+    query = (
+        supabase.table("recommendations")
+        .select(
+            "*, "
+            "learners!inner(dataset_id, external_learner_id, code_module, code_presentation), "
+            f"{prediction_relation}",
+            count="exact",
+        )
+        .eq("learners.dataset_id", dataset_id)
+    )
+
     for field, value in (
         ("learner_id", learner_id),
         ("prediction_id", prediction_id),
@@ -29,6 +47,10 @@ def list_recommendations(
     ):
         if value is not None:
             query = query.eq(field, value)
+
+    if risk_level is not None:
+        query = query.eq("predictions.risk_category", risk_level)
+
     return (
         query.order("created_at", desc=True)
         .order("id", desc=True)
@@ -59,24 +81,32 @@ def count_recommendations_by_status(
             query = query.eq("learner_id", learner_id)
         if prediction_id is not None:
             query = query.eq("prediction_id", prediction_id)
+
         response = query.execute()
         counts[recommendation_status] = int(response.count or 0)
+
     return counts
 
 
-def export_dataset_recommendations(dataset_id: str, *, limit: int, page_size: int = 500):
+def export_dataset_recommendations(
+    dataset_id: str, *, limit: int, page_size: int = 500
+):
     """Read saved recommendations with their verified dataset learner context."""
     if supabase is None:
         raise RuntimeError("database_unavailable")
+
     rows: list[dict[str, Any]] = []
     total = 0
     offset = 0
+
     while offset < limit:
         response = (
             supabase.table("recommendations")
             .select(
-                "id, learner_id, prediction_id, rule_id, action, reason, status, created_at, updated_at, "
-                "learners!inner(dataset_id, external_learner_id, code_module, code_presentation)",
+                "id, learner_id, prediction_id, rule_id, action, reason, status, "
+                "created_at, updated_at, "
+                "learners!inner(dataset_id, external_learner_id, code_module, "
+                "code_presentation)",
                 count="exact",
             )
             .eq("learners.dataset_id", dataset_id)
@@ -85,19 +115,27 @@ def export_dataset_recommendations(dataset_id: str, *, limit: int, page_size: in
             .range(offset, min(offset + page_size, limit) - 1)
             .execute()
         )
+
         batch = response.data or []
         if offset == 0:
             total = int(response.count or 0)
+
         rows.extend(batch)
+
         if len(batch) < min(page_size, limit - offset):
             break
+
         offset += len(batch)
+
     return rows, total
 
 
-def get_recommendation(recommendation_id: str, dataset_id: str) -> dict[str, Any] | None:
+def get_recommendation(
+    recommendation_id: str, dataset_id: str
+) -> dict[str, Any] | None:
     if supabase is None:
         raise RuntimeError("database_unavailable")
+
     response = (
         supabase.table("recommendations")
         .select("*, learners!inner(dataset_id)")
@@ -106,15 +144,21 @@ def get_recommendation(recommendation_id: str, dataset_id: str) -> dict[str, Any
         .limit(1)
         .execute()
     )
+
     rows = response.data or []
     return rows[0] if rows else None
 
 
 def set_recommendation_status(
-    recommendation_id: str, learner_id: str, current_status: str, next_status: str, updated_at: str
+    recommendation_id: str,
+    learner_id: str,
+    current_status: str,
+    next_status: str,
+    updated_at: str,
 ) -> dict[str, Any] | None:
     if supabase is None:
         raise RuntimeError("database_unavailable")
+
     response = (
         supabase.table("recommendations")
         .update({"status": next_status, "updated_at": updated_at})
@@ -124,5 +168,6 @@ def set_recommendation_status(
         .select("*")
         .execute()
     )
+
     rows = response.data or []
     return rows[0] if rows else None

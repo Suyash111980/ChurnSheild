@@ -2,12 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { datasetListState, roleRedirect } from "../src/utils/roleNavigation.js";
 
-test("Master Admin retains workspace access alongside platform pages", () => {
-  assert.equal(roleRedirect("master_admin", "/master-admin"), null);
-  assert.equal(roleRedirect("master_admin", "/master-admin/oulad"), null);
+test("Master Admin is routed only to the Admin Requests interface", () => {
   assert.equal(roleRedirect("master_admin", "/admin/users"), null);
-  assert.equal(roleRedirect("master_admin", "/dashboard"), null);
-  assert.equal(roleRedirect("master_admin", "/settings"), null);
+  for (const path of ["/", "/dashboard", "/learners", "/settings", "/master-admin", "/master-admin/oulad"]) {
+    assert.equal(roleRedirect("master_admin", path), "/admin/users");
+  }
 });
 
 test("ordinary roles cannot open Master Admin routes directly", () => {

@@ -49,6 +49,12 @@ describe("persisted recommendation queue presentation", () => {
     assert.equal(getRecommendationQueueState({
       datasetId: "d", result: page([recommendation({ status: "unknown" })]),
     }), "unavailable");
+    assert.equal(getRecommendationQueueState({
+      datasetId: "d", result: page([], { status_counts: undefined }),
+    }), "unavailable");
+    assert.equal(getRecommendationQueueState({
+      datasetId: "d", result: page([recommendation({ prediction: { risk_category: "critical" } })]),
+    }), "unavailable");
   });
 
   it("allows legacy null rule IDs while validating new rule IDs", () => {
@@ -76,6 +82,17 @@ describe("persisted recommendation queue presentation", () => {
       { status: "pending" }, { status: "pending" }, { status: "in_progress" },
       { status: "completed" }, { status: "dismissed" }, { status: "unknown" },
     ]), { pending: 2, in_progress: 1, completed: 1, dismissed: 1 });
+  });
+
+  it("accepts server-wide status totals independently from the current page", () => {
+    assert.equal(getRecommendationQueueState({
+      datasetId: "d",
+      result: page([recommendation()], {
+        total: 21,
+        has_more: true,
+        status_counts: { pending: 11, in_progress: 5, completed: 3, dismissed: 2 },
+      }),
+    }), "populated");
   });
 });
 

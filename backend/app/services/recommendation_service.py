@@ -15,8 +15,43 @@ ALLOWED_TRANSITIONS = {
 }
 
 
+def recommendation_to_api_record(row: dict[str, Any]) -> dict[str, Any]:
+    """Expose prediction context only when it belongs to this recommendation."""
+    item = {
+        key: value
+        for key, value in row.items()
+        if key not in {"learners", "prediction", "predictions"}
+    }
+
+    prediction = row.get("prediction", row.get("predictions"))
+
+    if isinstance(prediction, list):
+        prediction = prediction[0] if len(prediction) == 1 else None
+
+    if (
+        isinstance(prediction, dict)
+        and prediction.get("id") == row.get("prediction_id")
+        and prediction.get("learner_id") == row.get("learner_id")
+    ):
+        item["prediction"] = {
+            key: prediction.get(key)
+            for key in (
+                "id",
+                "model_version",
+                "risk_probability",
+                "risk_category",
+                "created_at",
+            )
+        }
+    else:
+        item["prediction"] = None
+
+    return item
+
+
 def list_recommendations(**filters: Any) -> dict[str, Any]:
     response = recommendation_repository.list_recommendations(**filters)
+
     status_counts = recommendation_repository.count_recommendations_by_status(
         dataset_id=filters["dataset_id"],
         learner_id=filters.get("learner_id"),
@@ -25,12 +60,18 @@ def list_recommendations(**filters: Any) -> dict[str, Any]:
 
     rows = []
     for row in response.data or []:
-        learner = row.get("learners") if isinstance(row.get("learners"), dict) else {}
+        learner = (
+            row.get("learners")
+            if isinstance(row.get("learners"), dict)
+            else {}
+        )
+
         item = recommendation_to_api_record(row)
         item.update({
             "external_learner_id": learner.get("external_learner_id"),
             "code_module": learner.get("code_module"),
             "code_presentation": learner.get("code_presentation"),
+            "learner": learner,
         })
         rows.append(item)
 
@@ -45,26 +86,6 @@ def list_recommendations(**filters: Any) -> dict[str, Any]:
         "has_more": filters["offset"] + len(rows) < total,
         "status_counts": status_counts,
     }
-
-
-def recommendation_to_api_record(row: dict[str, Any]) -> dict[str, Any]:
-    """Expose prediction context only when it belongs to this saved recommendation's learner."""
-    item = {key: value for key, value in row.items() if key not in {"learners", "predictions"}}
-    prediction = row.get("predictions")
-    if isinstance(prediction, list):
-        prediction = prediction[0] if len(prediction) == 1 else None
-    if (
-        isinstance(prediction, dict)
-        and prediction.get("id") == row.get("prediction_id")
-        and prediction.get("learner_id") == row.get("learner_id")
-    ):
-        item["prediction"] = {
-            key: prediction.get(key)
-            for key in ("id", "model_version", "risk_probability", "risk_category", "created_at")
-        }
-    else:
-        item["prediction"] = None
-    return item
 
 
 def update_status(
@@ -90,8 +111,6 @@ def update_status(
 
     learner_id = current.get("learner_id")
     if not isinstance(learner_id, str) or not learner_id:
-        # The scoped lookup should include its learner FK. Do not mutate if
-        # that verified scope cannot be carried into the conditional update.
         return None
 
     return recommendation_repository.set_recommendation_status(

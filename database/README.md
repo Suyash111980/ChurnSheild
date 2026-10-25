@@ -11,6 +11,7 @@ The complete schema expected by the current backend is the numbered sequence bel
 5. `migrations/005_dataset_ownership.sql` — upload ownership and processing metadata, dataset-scoped learner identity, dataset/dashboard views, and owner-scoped policies.
 6. `migrations/006_master_admin_workspaces.sql` — Admin request metadata, workspaces, approval RPC, workspace validation trigger, and workspace-scoped policies.
 7. `migrations/007_idempotent_model_predictions.sql` — non-null and unique `(learner_id, model_version)` prediction identity, after duplicate preflight.
+8. `migrations/008_admin_request_history.sql` — review timestamps/reviewer/rejection reason, a restricted admin-request audit log, a name/email allow-list RPC for paginated request management, and a pending-only atomic review RPC. Requires verified migrations 001, 003, and 006 plus Supabase `auth.users` and `service_role`.
 
 Migration 001 is only the initial schema. It does not provide the dataset ownership, workspace, processing, dashboard-summary, or prediction-upsert contract used by the current backend. `IF NOT EXISTS` avoids some duplicate-object errors; it does not reconcile an existing object with the required columns, types, constraints, index definition, grants, or policies.
 
@@ -53,6 +54,15 @@ Before a staging deployment, independently confirm the project reference in the 
 - If `predictions_learner_model_unique` already exists, verify it is on `public.predictions`, unique, valid, ready, non-partial, without expressions or included columns, and has exactly ordered keys `(learner_id, model_version)`. Do not accept a same-named index based on its name alone.
 
 Migration 007 is a separate integrity change from workspace repair. The backend prediction writer uses `on_conflict="learner_id,model_version"`; that write contract depends on the matching unique index.
+
+### Before 008
+
+- Verify migrations 001, 003, and 006 and the exact `profiles`/`workspaces` definitions, including `requested_role`, `approval_status`, `updated_at`, workspace uniqueness, and the current `master_review_admin_request(uuid,text)` function. Migration 008 replaces that function with a four-argument signature; it does not infer or recreate migration history.
+- Confirm Supabase `auth.users` has `id`, `email`, and `raw_user_meta_data`, and that the Auth trigger role/function ownership supports the new `SECURITY DEFINER` submission-audit trigger. Review `service_role` existence and permissions before deployment.
+- Check whether `profiles.reviewed_at`, `reviewed_by`, or `rejection_reason` and `admin_request_audit` already exist; verify exact definitions rather than relying on `IF NOT EXISTS`. Check the new audit table has no pre-existing broader policies or grants.
+- Review the one-time submitted-event backfill. It uses each current Admin request profile's `created_at` as its original request time and snapshots only an allow-listed display name/email from Auth metadata. It does not reconstruct historical review actors, review times, or decisions. Confirm that `created_at` is an acceptable submission-time proxy for existing request profiles before applying.
+- Confirm no caller depends on the old two-argument approval RPC outside the updated backend. The new RPC validates the reviewer profile again, locks the target pending request, and atomically updates its review fields, creates a workspace on approval, and writes an audit event. Existing reviewed rows remain unchanged; only pending requests can be decided.
+- After an approved application, verify counts/list parity, paging and filters, reviewer identity, rejection reason, audit events, RLS/grants, and concurrent duplicate-decision behavior. This migration is a schema/application contract change and requires a separate approved deployment procedure and recovery plan.
 
 ## Data preservation, transaction behavior, and recovery
 

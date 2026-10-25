@@ -23,6 +23,7 @@ def list_recommendations(
     recommendation_status: str | None = Query(
         default=None, alias="status", pattern="^(pending|in_progress|completed|dismissed)$"
     ),
+    risk_level: str | None = Query(default=None, pattern="^(low|medium|high)$"),
     _dataset: dict = Depends(require_processed_dataset),
 ):
     if recommendation_repository.supabase is None:
@@ -35,6 +36,7 @@ def list_recommendations(
             learner_id=str(learner_id) if learner_id else None,
             prediction_id=str(prediction_id) if prediction_id else None,
             recommendation_status=recommendation_status,
+            risk_level=risk_level,
         )
     except Exception as exc:
         raise HTTPException(

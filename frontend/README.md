@@ -96,11 +96,3 @@ src/
 ```
 
 Install dependencies, start the backend and configure Supabase, then run `npm run dev` from `frontend/`. Run `npm test` for the current Node test suite and `npm run build` for the Vite production build. End-to-end Supabase behavior requires a configured non-production project and deployed reviewed migrations; this README does not imply that live connectivity or database writes have been verified.
-
-## Current interaction and chart integrations
-
-- The collapsible desktop sidebar and mobile navigation drawer use the existing routes and account-role visibility. The topbar profile menu reads the authenticated Supabase user and `/auth/status` profile; its logout action uses the existing Supabase logout flow.
-- The notification drawer is UI-only and intentionally shows an empty state. There is no notification API or event stream, so notifications, unread counts, and mark-as-read actions are not simulated.
-- Global search matches application sections locally. Learner search calls the existing learner API, fetches its first 100 records, and searches those results client-side; there is no server-side search endpoint.
-- Dashboard and learner views use the selected dataset and persisted API responses. Historical outcomes and engagement timelines remain unavailable when the API does not provide those fields; no example values are presented as live results.
-- Root Cause Analysis and Early Warning Center use saved predictions and explanations when returned by the backend. The UI keeps model contributions distinct from causal evidence.
