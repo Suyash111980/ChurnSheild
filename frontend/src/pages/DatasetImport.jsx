@@ -6,10 +6,12 @@ import { deleteDataset, previewDataset, reprocessDataset, retryDataset, uploadDa
 import { confirmAndDeleteDataset, datasetDeletionFeedback, submitDatasetRevision } from "../services/datasetServiceCore.js";
 import { useDataset } from "../context/DatasetContext";
 import { useAuth } from "../context/AuthContext";
+import { usePageTransitionReady } from "../context/NavigationTransitionContext";
 
 export default function DatasetImport({ mode = "default" }) {
   const { datasets, datasetId, selectDataset, refresh, loading: datasetsLoading, error: datasetsError } = useDataset();
   const { accountProfile } = useAuth();
+  usePageTransitionReady(!datasetsLoading);
   const [file, setFile] = useState(null);
   const [name, setName] = useState(mode === "oulad" ? "OULAD prepared cohort" : "");
   const [preview, setPreview] = useState(null);

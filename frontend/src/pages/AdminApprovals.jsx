@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Navigate } from "react-router-dom";
 import { CheckCircle2, Clock3, RefreshCw, Search, XCircle } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { usePageTransitionReady } from "../context/NavigationTransitionContext";
 import { getAdminRequestDetails, getAdminRequests, reviewAdminRequest } from "../services/adminRequestService";
 import { adminRequestCount, adminRequestDisplayName, adminRequestError, adminRequestReviewerName, adminRequestStatusLabel, normalizeAdminRequestPage } from "../utils/adminRequestPresentation";
 
@@ -46,6 +47,7 @@ export default function AdminApprovals() {
   const [rejectionReason, setRejectionReason] = useState("");
   const [reviewError, setReviewError] = useState("");
   const [working, setWorking] = useState(false);
+  usePageTransitionReady(!loading);
   const dialogRef = useRef(null);
   const detailsLoadToken = useRef(0);
 

@@ -4,6 +4,7 @@ import { useDataset } from "../context/DatasetContext";
 import { useDashboard } from "../hooks/useDashboard";
 import LoadingState from "../components/common/LoadingState";
 import ErrorState from "../components/common/ErrorState";
+import { usePageTransitionReady } from "../context/NavigationTransitionContext";
 
 function Kpi({ Icon, label, value, note, tone }) {
   return <article className="panel analytics-kpi"><span className={`analytics-kpi-icon ${tone}`}><Icon size={17}/></span><span>{label}</span><strong>{value}</strong><em>{note}</em></article>;
@@ -12,6 +13,7 @@ function Kpi({ Icon, label, value, note, tone }) {
 export default function Analytics() {
   const { dataset } = useDataset();
   const { data, loading, error, retry } = useDashboard();
+  usePageTransitionReady(!loading);
   return <><PageHeader eyebrow="PERFORMANCE & TRENDS" title="Analytics" subtitle={`${dataset?.dataset_name || "Selected dataset"} · verified descriptive statistics and persisted prediction coverage.`}/>
     {loading && <LoadingState rows={2} label="Loading analytics"/>}
     {error && <ErrorState title="Analytics unavailable" message="Dataset statistics could not be retrieved. No sample values are substituted." onRetry={retry}/>}

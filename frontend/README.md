@@ -44,7 +44,7 @@ npm run preview
 
 ## Authentication
 
-Login and signup continue to use the existing Supabase Auth integration. The API client attaches the current Supabase access token and attempts the existing session refresh flow after an unauthorized response. Protected dashboard routes require an authenticated session and an approved account. This frontend does not implement a parallel demo-auth system or bypass backend authorization.
+Login and signup continue to use the existing Supabase Auth integration. Password recovery uses Supabase Auth: `/forgot-password` requests a link, and `/set-new-password` accepts a password update only after Supabase establishes a recovery session. Add the frontend origin and `/set-new-password` path to the Supabase Auth redirect URL allow-list for each environment (for example, `http://localhost:5173/set-new-password` in development). The API client attaches the current Supabase access token and attempts the existing session refresh flow after an unauthorized response. Protected dashboard routes require an authenticated session and an approved account. This frontend does not implement a parallel demo-auth system or bypass backend authorization.
 
 ## Routes
 
@@ -52,6 +52,8 @@ Login and signup continue to use the existing Supabase Auth integration. The API
 | --- | --- | --- |
 | `/login` | Sign in with the configured Supabase project | Public/guest |
 | `/signup` | Create an account through the existing Supabase flow | Public/guest |
+| `/forgot-password` | Request a Supabase password reset email | Public |
+| `/set-new-password` | Set a new password using a validated Supabase recovery session | Public recovery |
 | `/dashboard` | Selected dataset summary and persisted risk distribution | Approved account |
 | `/datasets` | Preview, validate, upload, and reprocess a dataset | Approved Admin or Master Admin with active workspace |
 | `/learners` | Dataset-scoped learner records with backend pagination | Approved account |

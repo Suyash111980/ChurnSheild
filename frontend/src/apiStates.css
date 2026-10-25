@@ -275,3 +275,115 @@
   .recommendation-row > .secondary-button,
   .recommendation-row > .primary-button { min-height: 32px; }
 }
+.learner-dataset-scope {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0 18px 14px;
+  color: #526078;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.learner-dataset-scope select {
+  width: min(420px, 100%);
+  min-width: 0;
+  max-width: 100%;
+  height: 40px;
+  padding: 0 34px 0 12px;
+  border: 1px solid #c8c1ff;
+  border-radius: 8px;
+  background-color: #fff;
+  color: #29364d;
+  font-size: 13px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+}
+.learner-dataset-scope select:hover { border-color: #a895ff; box-shadow: 0 2px 8px rgb(105 72 245 / 8%); }
+.learner-dataset-scope select:focus-visible { border-color: #9e8cff; box-shadow: 0 0 0 3px rgb(105 72 245 / 12%); outline: none; }
+.learner-dataset-scope select option { background: #fff; color: #29364d; }
+:root[data-theme="dark"] .learner-dataset-scope { color: #c4cde0; }
+:root[data-theme="dark"] .learner-dataset-scope select { border-color: #7564c5; background-color: #172235; color: #e4eaf5; }
+:root[data-theme="dark"] .learner-dataset-scope select option { background: #172235; color: #e4eaf5; }
+@media (max-width: 520px) {
+  .learner-dataset-scope { align-items: stretch; flex-direction: column; gap: 7px; padding: 0 13px 13px; }
+  .learner-dataset-scope select { width: 100%; }
+}
+
+
+
+.api-table-panel .api-table-heading h2 { font-size: 21px; line-height: 1.3; font-weight: 650; }
+.api-table-panel .api-table-heading p { font-size: 14px; line-height: 1.5; }
+.api-table-panel .api-learner-table { min-width: 900px; }
+.api-table-panel .api-learner-table th { font-size: 13px; font-weight: 650; }
+.api-table-panel .api-learner-table td { font-size: 14px; line-height: 1.45; }
+.api-table-panel .api-learner-table .learner-cell strong { font-size: 15px; line-height: 1.35; font-weight: 700; }
+.api-table-panel .api-learner-table .learner-cell small { font-size: 13px; line-height: 1.35; }
+.api-table-panel .api-learner-table .risk-badge { font-size: 13px; padding: 5px 8px; }
+.api-table-panel .api-learner-table .profile-link { font-size: 13px; }
+.api-table-panel .table-toolbar .search-box input,
+.api-table-panel .table-toolbar .filter-row select,
+.api-table-panel .table-toolbar .filter-row input { font-size: 14px; }
+@media (max-width: 760px) {
+  .api-table-panel .api-table-heading h2 { font-size: 20px; }
+  .api-table-panel .api-table-heading p { font-size: 13px; }
+  .api-table-panel .api-learner-table th { font-size: 12px; }
+  .api-table-panel .api-learner-table td { font-size: 13px; }
+  .api-table-panel .api-learner-table .learner-cell strong { font-size: 14px; }
+  .api-table-panel .api-learner-table .learner-cell small { font-size: 12px; }
+}
+
+
+.settings-theme-control { display: grid; gap: 8px; padding: 18px 0; }
+.settings-theme-control label { color: var(--text-primary); font-size: 14px; font-weight: 600; }
+.settings-theme-control select { width: min(100%, 380px); min-height: 44px; padding: 0 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-raised); color: var(--text-primary); font-size: 14px; transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease; }
+.settings-theme-control select:hover { border-color: #a895ff; }
+.settings-theme-control select:focus-visible { outline: 3px solid rgb(168 154 255 / 42%); outline-offset: 2px; border-color: #7656f6; }
+.settings-theme-control > p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+:root[data-theme="dark"] .settings-theme-control select option { background: var(--surface); color: var(--text-primary); }
+@media (max-width: 760px) { .settings-theme-control select { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { .settings-theme-control select { transition: none; } }
+
+/* Settings cards: consistent interaction and a full-width account section */
+.settings-page-card {
+  border-color: var(--border-color);
+  background: var(--surface);
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease, background-color 220ms ease;
+}
+.settings-page-card:hover {
+  transform: translateY(-3px);
+  border-color: #c9bfff;
+  box-shadow: 0 10px 24px rgb(45 35 100 / 10%);
+}
+.settings-page-card:hover .settings-page-icon {
+  background: #e9e3ff;
+  color: #6042e8;
+  transform: scale(1.04);
+}
+.settings-page-icon { transition: background-color 220ms ease, color 220ms ease, transform 220ms ease; }
+.settings-page-grid > .settings-page-card:nth-child(3) { grid-column: 1 / -1; }
+:root[data-theme="dark"] .settings-page-card:hover { border-color: #6959a7; box-shadow: 0 10px 24px rgb(0 0 0 / 24%); }
+:root[data-theme="dark"] .settings-page-card:hover .settings-page-icon { background: #3a3268; color: #d4caff; }
+@media (prefers-reduced-motion: reduce) {
+  .settings-page-card, .settings-page-icon { transition: none; }
+  .settings-page-card:hover { transform: none; }
+}
+
+/* Slightly larger, more readable Settings card typography */
+.settings-page-card-heading h2 { font-size: 17px; }
+.settings-page-card-heading p { font-size: 12px; }
+.settings-theme-control label { font-size: 16px; }
+.settings-theme-control select, .settings-theme-option { font-size: 16px; }
+.settings-theme-control > p, .settings-theme-help { font-size: 15px; }
+.settings-dataset-name { font-size: 17px; }
+.settings-status { font-size: 11px; }
+.settings-updated { font-size: 12px; }
+.settings-data-state strong { font-size: 13px; }
+.settings-data-state span { font-size: 12px; }
+.settings-card-footer .secondary-button, .settings-logout-button { font-size: 12px; }
+.settings-account-avatar { font-size: 16px; }
+.settings-account-summary strong { font-size: 15px; }
+.settings-account-summary span { font-size: 13px; }
+.settings-account-summary small, .settings-logout-error { font-size: 11px; }

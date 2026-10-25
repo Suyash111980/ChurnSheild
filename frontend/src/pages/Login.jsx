@@ -1,25 +1,22 @@
 
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   Eye,
   EyeOff,
-  ShieldCheck,
   ArrowRight,
   LockKeyhole,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { supabase } from "../lib/supabase";
+import AnimatedAuthLogo from "../components/common/AnimatedAuthLogo";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const nav = useNavigate();
   const { login } = useAuth();
 
   const describeAuthError = (authError) => {
@@ -40,7 +37,6 @@ export default function Login() {
     e.preventDefault();
     if (loading) return;
     setError("");
-    setMessage("");
 
     if (!email.trim() || !password) {
       setError("Enter your email and password to continue.");
@@ -56,7 +52,6 @@ export default function Login() {
 
     try {
       await login(email.trim(), password);
-      nav("/dashboard", { replace: true });
     } catch (err) {
       setError(describeAuthError(err));
     } finally {
@@ -64,44 +59,14 @@ export default function Login() {
     }
   };
 
-  const resetPassword = async () => {
-    if (loading) return;
-    setError("");
-    setMessage("");
 
-    const normalizedEmail = email.trim().toLowerCase();
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-      setError("Enter your email address first to reset your password.");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const { error: resetError } =
-        await supabase.auth.resetPasswordForEmail(normalizedEmail);
-
-      if (resetError) throw resetError;
-
-      setMessage(
-        "If an account exists for this email, a password reset link will be sent."
-      );
-    } catch (err) {
-      setError(err.message || "Unable to request a password reset.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <main className="auth-page">
       <section className="auth-brand-panel">
-        <div className="auth-brand">
-          <div className="brand-icon">
-            <ShieldCheck size={22} />
-          </div>
-          <span>
+        <div className="auth-brand auth-brand-animated">
+          <AnimatedAuthLogo variant="brand" decorative animated />
+          <span className="auth-brand-name">
             Churn<span className="brand-accent">Shield</span>
           </span>
         </div>
@@ -144,11 +109,9 @@ export default function Login() {
       </section>
 
       <section className="auth-main">
-        <div className="auth-mobile-brand">
-          <div className="brand-icon">
-            <ShieldCheck size={21} />
-          </div>
-          Churn<span className="brand-accent">Shield</span>
+        <div className="auth-mobile-brand auth-brand-animated">
+          <AnimatedAuthLogo variant="brand" decorative animated />
+          <span className="auth-brand-name">Churn<span className="brand-accent">Shield</span></span>
         </div>
 
         <div className="auth-form-wrap">
@@ -191,14 +154,7 @@ export default function Login() {
               <label className="field-label" htmlFor="password">
                 Password
               </label>
-              <button
-                type="button"
-                className="text-button"
-                onClick={resetPassword}
-                disabled={loading}
-              >
-                Forgot password?
-              </button>
+              <Link className="text-button" to="/forgot-password">Forgot password?</Link>
             </div>
 
             <div className="password-wrap">
@@ -226,12 +182,6 @@ export default function Login() {
             {error && (
               <div id="login-error" className="form-error" role="alert">
                 {error}
-              </div>
-            )}
-
-            {message && (
-              <div id="login-success" role="status" className="form-success">
-                {message}
               </div>
             )}
 

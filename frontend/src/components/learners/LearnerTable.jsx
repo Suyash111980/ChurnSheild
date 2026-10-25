@@ -3,8 +3,6 @@ import { Link } from "react-router-dom";
 
 const columns = [
   ["id_student", "Learner"],
-  ["code_module", "Module"],
-  ["code_presentation", "Presentation"],
   ["highest_education", "Education"],
   ["region", "Region"],
   ["latest_risk_category", "Saved risk"],
@@ -21,7 +19,7 @@ function valueOrDash(value) {
   return value == null || value === "" ? "—" : String(value);
 }
 
-export default function LearnerTable({ learners, sort, direction, onSort, backTo = "/learners" }) {
+export default function LearnerTable({ learners, sort, direction, onSort, backTo = "/learners", serialOffset = 0 }) {
   return (
     <div className="table-scroll">
       <table className="learner-table api-learner-table">
@@ -37,16 +35,14 @@ export default function LearnerTable({ learners, sort, direction, onSort, backTo
           <th><span className="sr-only">Profile</span></th>
         </tr></thead>
         <tbody>
-          {learners.map((learner) => (
+          {learners.map((learner, index) => (
             <tr key={learner.id}>
               <td>
                 <div className="learner-cell">
-                  <span className="learner-avatar">{String(learner.id_student ?? "L").slice(0, 2)}</span>
+                  <span className="learner-avatar" aria-label={`Serial number ${serialOffset + index + 1}`}>{serialOffset + index + 1}</span>
                   <span><strong>{displayName(learner)}</strong><small>ID {valueOrDash(learner.id_student)}</small></span>
                 </div>
               </td>
-              <td>{valueOrDash(learner.code_module)}</td>
-              <td>{valueOrDash(learner.code_presentation)}</td>
               <td>{valueOrDash(learner.highest_education)}</td>
               <td>{valueOrDash(learner.region)}</td>
               <td>{learner.latest_risk_category ? <span className={`risk-badge risk-${learner.latest_risk_category}`} title={`Model ${valueOrDash(learner.latest_model_version)}`}>{learner.latest_risk_category}</span> : <span className="prediction-unavailable">No prediction</span>}</td>
@@ -59,3 +55,5 @@ export default function LearnerTable({ learners, sort, direction, onSort, backTo
     </div>
   );
 }
+
+

@@ -2,13 +2,14 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { ShieldCheck } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { accountStatusMessage } from "../utils/accountStatusMessage.js";
+import AuthLoadingScreen from "../components/common/AuthLoadingScreen";
 
 export default function AccountStatus() {
   const { accountProfile, profileErrorStatus, profileErrorDetail, profileLoading, loading, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
 
   if (loading || (isAuthenticated && profileLoading)) {
-    return <div className="auth-loading" role="status">Checking account approval…</div>;
+    return <AuthLoadingScreen title="Checking account approval" description="Verifying your current access status with ChurnShield." />;
   }
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (accountProfile?.approval_status === "approved") {

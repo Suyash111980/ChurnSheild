@@ -1,5 +1,6 @@
 
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { useEffect } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import AppLayout from "./components/layout/AppLayout";
 import Analytics from "./pages/Analytics";
@@ -7,6 +8,8 @@ import Dashboard from "./pages/Dashboard";
 import Learners from "./pages/Learners";
 import LearnerProfile from "./pages/LearnerProfile";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
+import SetNewPassword from "./pages/SetNewPassword";
 import NotFound from "./pages/NotFound";
 import Settings from "./pages/Settings";
 import Signup from "./pages/Signup";
@@ -21,21 +24,18 @@ import CourseInsights from "./pages/CourseInsights";
 import MasterAdminDashboard from "./pages/MasterAdminDashboard";
 import OuladOverview from "./pages/OuladOverview";
 import { roleRedirect } from "./utils/roleNavigation";
+import AuthLoadingScreen from "./components/common/AuthLoadingScreen";
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading, accountProfile, profileLoading } = useAuth();
   const location = useLocation();
 
   if (loading) {
-    return (
-      <div className="auth-loading" role="status">
-        Checking session...
-      </div>
-    );
+    return <AuthLoadingScreen title="Checking your session" description="Connecting securely to your ChurnShield workspace." />;
   }
 
   if (isAuthenticated && profileLoading) {
-    return <div className="auth-loading" role="status">Checking account approval...</div>;
+    return <AuthLoadingScreen title="Checking account approval" description="Verifying your current access status with ChurnShield." />;
   }
 
   if (isAuthenticated && accountProfile?.approval_status !== "approved") {
@@ -55,20 +55,39 @@ function MasterOnly({ children }) {
   return accountProfile?.app_role === "master_admin" ? children : <Navigate to="/dashboard" replace />;
 }
 
-function GuestRoute({ children }) {
-  const { isAuthenticated, loading } = useAuth();
+function LoginSuccessRedirect() {
+  const navigate = useNavigate();
+  const { consumeAuthIntro } = useAuth();
+
+  useEffect(() => {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const timer = window.setTimeout(() => {
+      consumeAuthIntro();
+      navigate("/dashboard", { replace: true });
+    }, reducedMotion ? 180 : 1250);
+    return () => window.clearTimeout(timer);
+  }, [consumeAuthIntro, navigate]);
+
+  return <AuthLoadingScreen title="Login successful" description="Your account is signed in. ChurnShield is checking your workspace access." />;
+}
+
+function GuestRoute({ children, mode }) {
+  const { isAuthenticated, loading, authFlowInProgress, authIntroIntent } = useAuth();
 
   if (loading) {
-    return (
-      <div className="auth-loading" role="status">
-        Checking session...
-      </div>
-    );
+    return <AuthLoadingScreen title="Checking your session" description="Connecting securely to your ChurnShield workspace." />;
+  }
+
+  if (mode === "login" && isAuthenticated && authFlowInProgress && !authIntroIntent) {
+    return children;
+  }
+
+  if (mode === "login" && isAuthenticated && authIntroIntent === "login") {
+    return <LoginSuccessRedirect />;
   }
 
   return isAuthenticated ? <Navigate to="/dashboard" replace /> : children;
 }
-
 export default function App() {
   return (
     <AuthProvider>
@@ -78,7 +97,7 @@ export default function App() {
         <Route
           path="/login"
           element={
-            <GuestRoute>
+            <GuestRoute mode="login">
               <Login />
             </GuestRoute>
           }
@@ -92,6 +111,9 @@ export default function App() {
             </GuestRoute>
           }
         />
+
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/set-new-password" element={<SetNewPassword />} />
 
         <Route path="/account-status" element={<AccountStatus />} />
 

@@ -7,6 +7,7 @@ import LoadingState from "../components/common/LoadingState";
 import PageHeader from "../components/layout/PageHeader";
 import { getLearner } from "../services/learnerService";
 import { useDataset } from "../context/DatasetContext";
+import { usePageTransitionReady } from "../context/NavigationTransitionContext";
 import { buildRiskEvidenceSummary, rankPersistedExplanations, scopeLearnerRecommendations } from "../utils/learnerProfilePresentation";
 import { formatRecommendation } from "../utils/recommendationCopy";
 
@@ -53,7 +54,7 @@ function EvidenceItem({ item, compact = false }) {
 
 export default function LearnerProfile() {
   const { learnerId } = useParams();
-  const { datasetId } = useDataset();
+  const { datasetId, loading: datasetsLoading } = useDataset();
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const requestedDatasetId = searchParams.get("dataset_id");
@@ -80,6 +81,7 @@ export default function LearnerProfile() {
   const record = current ? request.record : null;
   const error = current ? request.error : null;
   const loading = Boolean(effectiveDatasetId) && (!current || request.loading);
+  usePageTransitionReady(!datasetsLoading && !loading);
   const learner = record?.learner;
   const prediction = record?.latest_prediction;
   const explanations = Array.isArray(record?.risk_explanations) ? record.risk_explanations : [];

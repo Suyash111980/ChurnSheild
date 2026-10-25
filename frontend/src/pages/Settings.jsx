@@ -1,14 +1,17 @@
 import { useState } from "react";
-import { AlertCircle, Database, UserRound, LogOut, LoaderCircle, RefreshCw } from "lucide-react";
+import { AlertCircle, Database, UserRound, LogOut, LoaderCircle, RefreshCw, Monitor } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 import { useDataset } from "../context/DatasetContext";
 import PageHeader from "../components/layout/PageHeader";
 import { getAvatarDetails } from "../utils/userAvatar";
+import { usePageTransitionReady } from "../context/NavigationTransitionContext";
 
 export default function Settings() {
-  const { user, accountProfile, logout } = useAuth(); const { datasets, dataset, loading: datasetsLoading, error: datasetsError, refresh } = useDataset(); const [logoutError, setLogoutError] = useState(""); const [loggingOut, setLoggingOut] = useState(false); const navigate = useNavigate();
+  const { user, accountProfile, logout } = useAuth(); const { datasets, dataset, loading: datasetsLoading, error: datasetsError, refresh } = useDataset(); const { theme, mode, setMode } = useTheme(); const [logoutError, setLogoutError] = useState(""); const [loggingOut, setLoggingOut] = useState(false); const navigate = useNavigate();
   const accountLabel = getAvatarDetails(user, accountProfile).label;
+  usePageTransitionReady(!datasetsLoading);
   const updatedAt = dataset?.updated_at || dataset?.uploaded_at;
   const updatedAtLabel = updatedAt && !Number.isNaN(new Date(updatedAt).getTime()) ? new Date(updatedAt).toLocaleString() : "Last updated time unavailable";
   const datasetStatus = dataset?.status || "Unknown status";
@@ -22,6 +25,10 @@ export default function Settings() {
     finally { setLoggingOut(false); }
   };
   return <><PageHeader title="Settings" subtitle="Manage your workspace data and account."/><div className="settings-page-grid">
+    <section className="panel settings-page-card" aria-labelledby="settings-appearance-heading">
+      <div className="settings-page-card-heading"><span className="settings-page-icon"><Monitor size={20}/></span><div><h2 id="settings-appearance-heading">Appearance</h2><p>Choose how ChurnShield looks on this device.</p></div></div>
+      <div className="settings-theme-control"><label htmlFor="settings-theme-mode">Theme preference</label><select id="settings-theme-mode" value={mode} onChange={(event) => setMode(event.target.value)}><option value="light">Light</option><option value="dark">Dark</option></select><p>Currently showing {theme} mode.</p></div>
+    </section>
     <section className="panel settings-page-card" aria-labelledby="settings-dataset-heading">
       <div className="settings-page-card-heading"><span className="settings-page-icon"><Database size={20}/></span><div><h2 id="settings-dataset-heading">Dataset</h2><p>Your selected workspace dataset.</p></div></div>
       <div className="settings-dataset-content">
