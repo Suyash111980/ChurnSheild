@@ -38,7 +38,7 @@ export default function LearnerTable({ learners, sort, direction, onSort, backTo
         </tr></thead>
         <tbody>
           {learners.map((learner) => (
-            <tr key={learner.id} tabIndex={0} aria-label={`Learner ${learner.id_student ?? learner.id}`}>
+            <tr key={learner.id}>
               <td>
                 <div className="learner-cell">
                   <span className="learner-avatar">{String(learner.id_student ?? "L").slice(0, 2)}</span>

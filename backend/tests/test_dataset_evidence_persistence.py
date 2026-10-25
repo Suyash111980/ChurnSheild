@@ -30,6 +30,18 @@ def _contributions(records):
     ] for _ in records]
 
 
+def test_recommendation_database_logs_only_a_safe_error_code(caplog):
+    error = RuntimeError("credential-bearing provider message")
+    error.code = "private detail"
+
+    dataset_repository._log_database_error("upsert", error)
+
+    assert "exception_type=RuntimeError" in caplog.text
+    assert "error_code=unavailable" in caplog.text
+    assert "credential-bearing" not in caplog.text
+    assert "private detail" not in caplog.text
+
+
 def test_saved_prediction_receives_validated_explanations_and_qualified_recommendation(monkeypatch):
     writes = {"explanations": [], "recommendations": []}
     monkeypatch.setattr(dataset_service, "explain_records", _contributions)

@@ -26,6 +26,16 @@ function isValidRecommendationPage(result) {
     && typeof item.action === "string" && item.action.trim().length > 0
     && typeof item.reason === "string" && item.reason.trim().length > 0
     && (item.rule_id == null || (typeof item.rule_id === "string" && item.rule_id.trim().length > 0))
+    && (item.learner == null || (typeof item.learner === "object" && !Array.isArray(item.learner)))
+    && (item.prediction == null || (
+      typeof item.prediction === "object" && !Array.isArray(item.prediction)
+      && (item.prediction.risk_category == null || ["low", "medium", "high"].includes(item.prediction.risk_category))
+      && (item.prediction.risk_probability == null || (
+        typeof item.prediction.risk_probability === "number"
+        && Number.isFinite(item.prediction.risk_probability)
+        && item.prediction.risk_probability >= 0 && item.prediction.risk_probability <= 1
+      ))
+    ))
   ));
 }
 

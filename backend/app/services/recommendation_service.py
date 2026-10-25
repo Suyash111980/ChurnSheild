@@ -17,24 +17,26 @@ ALLOWED_TRANSITIONS = {
 
 def list_recommendations(**filters: Any) -> dict[str, Any]:
     response = recommendation_repository.list_recommendations(**filters)
+    rows = []
+    for row in response.data or []:
+        learner = row.get("learners") if isinstance(row.get("learners"), dict) else {}
+        prediction = row.get("prediction") if isinstance(row.get("prediction"), dict) else None
+        item = {key: value for key, value in row.items() if key not in {"learners", "prediction"}}
+        item.update({
+            "external_learner_id": learner.get("external_learner_id"),
+            "code_module": learner.get("code_module"),
+            "code_presentation": learner.get("code_presentation"),
+            "learner": learner,
+            "prediction": prediction,
+        })
+        rows.append(item)
+
+    total = response.count if response.count is not None else len(rows)
     status_counts = recommendation_repository.count_recommendations_by_status(
         dataset_id=filters["dataset_id"],
         learner_id=filters.get("learner_id"),
         prediction_id=filters.get("prediction_id"),
     )
-
-    rows = []
-    for row in response.data or []:
-        learner = row.get("learners") if isinstance(row.get("learners"), dict) else {}
-        item = {key: value for key, value in row.items() if key != "learners"}
-        item.update({
-            "external_learner_id": learner.get("external_learner_id"),
-            "code_module": learner.get("code_module"),
-            "code_presentation": learner.get("code_presentation"),
-        })
-        rows.append(item)
-
-    total = response.count if response.count is not None else len(rows)
 
     return {
         "data": rows,

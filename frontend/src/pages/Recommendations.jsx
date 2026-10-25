@@ -13,6 +13,10 @@ import { getRecommendationQueueState, getRecommendationStatusCounts } from "../u
 const statusLabels = { pending: "Suggested", in_progress: "In progress", completed: "Completed", dismissed: "Dismissed" };
 const statusCards = [["pending", "Suggested", Lightbulb], ["in_progress", "In progress", Clock3], ["completed", "Completed", CheckCircle2], ["dismissed", "Dismissed", Sparkles]];
 function riskName(value) { const normalized = String(value || "").toLowerCase(); return ["low", "medium", "high"].includes(normalized) ? normalized : "neutral"; }
+function formatProbability(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1
+    ? `${(value * 100).toFixed(1)}%` : null;
+}
 
 export default function Recommendations() {
   const { datasetId } = useDataset();
@@ -24,6 +28,7 @@ export default function Recommendations() {
   const [request, setRequest] = useState({ datasetId: null, result: null, error: null, loading: false });
   const [reload, setReload] = useState(0);
   const [status, setStatus] = useState("");
+  const [risk, setRisk] = useState("");
   const [workingId, setWorkingId] = useState(null);
   const [updateError, setUpdateError] = useState(null);
   const [offset, setOffset] = useState(0);
@@ -31,13 +36,14 @@ export default function Recommendations() {
     if (!effectiveDatasetId) { setRequest({ datasetId: null, result: null, error: null, loading: false }); return () => {}; }
     const controller = new AbortController();
     setRequest({ datasetId: effectiveDatasetId, result: null, error: null, loading: true });
-    getRecommendations({ dataset_id: effectiveDatasetId, ...(learnerFilter ? { learner_id: learnerFilter } : {}), ...(status ? { status } : {}), limit: 20, offset }, { signal: controller.signal })
+    getRecommendations({ dataset_id: effectiveDatasetId, ...(learnerFilter ? { learner_id: learnerFilter } : {}), ...(status ? { status } : {}), ...(risk ? { risk_level: risk } : {}), limit: 20, offset }, { signal: controller.signal })
       .then((result) => setRequest({ datasetId: effectiveDatasetId, result, error: null, loading: false }))
       .catch((error) => { if (error.name !== "AbortError") setRequest({ datasetId: effectiveDatasetId, result: null, error, loading: false }); });
     return () => controller.abort();
-  }, [effectiveDatasetId, learnerFilter, status, offset]);
-  useEffect(() => { setUpdateError(null); setOffset(0); setStatus(""); }, [effectiveDatasetId, learnerFilter]);
+  }, [effectiveDatasetId, learnerFilter, status, risk, offset]);
+  useEffect(() => { setUpdateError(null); setOffset(0); setStatus(""); setRisk(""); }, [effectiveDatasetId, learnerFilter]);
   useEffect(() => { setOffset(0); }, [status]);
+  useEffect(() => { setOffset(0); }, [risk]);
   useEffect(() => load(), [load, reload]);
   const current = request.datasetId === effectiveDatasetId;
   const result = current ? request.result : null;
@@ -47,6 +53,7 @@ export default function Recommendations() {
   const rows = allRows;
   const totals = useMemo(() => getRecommendationStatusCounts(result, allRows), [result, allRows]);
   const queueState = getRecommendationQueueState({ datasetId: effectiveDatasetId, loading, error, result });
+  const hasFilteredEmpty = queueState === "empty" && Boolean(status || risk);
   const canUpdate = accountProfile?.app_role === "admin";
   async function update(item, nextStatus) {
     setWorkingId(item.id);
@@ -71,21 +78,25 @@ export default function Recommendations() {
     {updateError?.datasetId === effectiveDatasetId && <ErrorState title="Recommendation status was not confirmed" message="The status update failed or its response was unavailable. Refresh the queue to verify the latest saved status before trying again." onRetry={refreshAfterUpdateError}/>}
     {queueState === "no_dataset" && <EmptyState title="Select a dataset" message="Choose a processed dataset to view its persisted recommendations."/>}
     {queueState === "unavailable" && <ErrorState title="Recommendations unavailable" message="The API response did not contain a recommendation list. No empty state is shown because the result could not be verified." onRetry={() => setReload((value) => value + 1)}/>}
-    {queueState === "empty" && <><section className="metrics-grid action-kpis">{statusCards.map(([key, label, Icon]) => <article className="metric-card compact-kpi" key={key}><span className="metric-icon violet"><Icon size={18}/></span><strong>{totals[key]}</strong><span>{label}</span><small>Saved for this dataset{learnerFilter ? " and learner" : ""}</small></article>)}</section><EmptyState title={status ? "No matching recommendations" : "No recommendations yet"} message={status ? "No persisted recommendations match this status filter. The summary above shows all saved statuses for this dataset." : "The API returned no persisted recommendations for this dataset. This page does not generate placeholder actions."}/></>}
+    {queueState === "empty" && <><section className="metrics-grid action-kpis">{statusCards.map(([key, label, Icon]) => <article className="metric-card compact-kpi" key={key}><span className="metric-icon violet"><Icon size={18}/></span><strong>{totals[key]}</strong><span>{label}</span><small>All statuses · selected dataset{learnerFilter ? " and learner" : ""}</small></article>)}</section><EmptyState title={hasFilteredEmpty ? "No matching recommendations" : "No recommendations yet"} message={hasFilteredEmpty ? "No persisted recommendations match the selected filters. Clear a filter to review the full queue." : "The API returned no persisted recommendations for this dataset. This page does not generate placeholder actions."}/></>}
     {queueState === "populated" && <>
-      <section className="metrics-grid action-kpis">{statusCards.map(([key, label, Icon]) => <article className="metric-card compact-kpi" key={key}><span className="metric-icon violet"><Icon size={18}/></span><strong>{totals[key]}</strong><span>{label}</span><small>Saved for this dataset{learnerFilter ? " and learner" : ""}</small></article>)}</section>
-      <section className="panel action-queue"><div className="panel-heading"><div><h2>Retention action queue</h2><p>Showing this page of {result.total} persisted recommendations. Suggestions require human review.</p></div><select aria-label="Filter recommendation status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All statuses</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
+      <section className="metrics-grid action-kpis" aria-label="Recommendation status totals">{statusCards.map(([key, label, Icon]) => <article className="metric-card compact-kpi" key={key}><span className="metric-icon violet"><Icon size={18}/></span><strong>{totals[key]}</strong><span>{label}</span><small>All statuses · selected dataset{learnerFilter ? " and learner" : ""}</small></article>)}</section>
+      <section className="panel action-queue"><div className="panel-heading recommendation-heading"><div><h2>Retention action queue</h2><p>Showing {result.count} of {result.total} matching persisted recommendations. Suggestions require human review.</p></div><div className="recommendation-filters"><label>Status<select aria-label="Filter recommendation status" value={status} onChange={(event) => { setOffset(0); setStatus(event.target.value); }}><option value="">All statuses</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Risk level<select aria-label="Filter recommendation risk level" value={risk} onChange={(event) => { setOffset(0); setRisk(event.target.value); }}><option value="">All risk levels</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label></div></div>
         <div className="action-list">{rows.map((item) => {
-          const learnerLabel = item.external_learner_id ?? item.id_student ?? item.learner_id;
-          const courseLabel = [item.code_module, item.code_presentation].filter(Boolean).join(" · ");
-          const risk = item.risk_category || item.prediction?.risk_category;
-          const hasRisk = ["low", "medium", "high"].includes(String(risk || "").toLowerCase());
+          const learner = item.learner || {};
+          const learnerLabel = learner.external_learner_id ?? item.external_learner_id ?? item.id_student ?? item.learner_id;
+          const courseLabel = [learner.code_module || item.code_module, learner.code_presentation || item.code_presentation].filter(Boolean).join(" · ");
+          const prediction = item.prediction || {};
+          const riskValue = prediction.risk_category || item.risk_category;
+          const probability = formatProbability(prediction.risk_probability);
+          const hasRisk = ["low", "medium", "high"].includes(String(riskValue || "").toLowerCase());
           return <article className="action-row" key={item.id}>
-            <i className={`action-edge ${riskName(risk)}`}/>
+            <i className={`action-edge ${riskName(riskValue)}`}/>
             <div className="action-copy"><strong>{item.action || "Recommendation"}</strong><span>{item.reason || "No supporting rationale was recorded."}</span>
               {learnerLabel && <small className="action-context">Learner {learnerLabel}{courseLabel ? ` · ${courseLabel}` : ""}</small>}
-              {hasRisk && <span className={`risk-badge ${riskName(risk)}`}>{String(risk).toLowerCase()} risk context</span>}
-              {item.prediction_id && !hasRisk && <small className="action-context">Related prediction: risk context is not included in this API response.</small>}
+              {hasRisk && <span className={`risk-badge risk-${riskName(riskValue)}`}><i/>{riskName(riskValue)} risk{probability ? ` · ${probability}` : ""}</span>}
+              {!hasRisk && item.prediction_id && <small className="action-context">Prediction risk context unavailable</small>}
+              <details className="recommendation-details"><summary>Recommendation details</summary><dl><div><dt>Rule</dt><dd>{item.rule_id || "Not recorded"}</dd></div><div><dt>Prediction</dt><dd>{item.prediction_id || "Not linked"}</dd></div>{prediction.model_version && <div><dt>Model</dt><dd>{prediction.model_version}</dd></div>}{probability && <div><dt>Saved risk</dt><dd>{riskName(riskValue)} · {probability}</dd></div>}<div><dt>Review</dt><dd>Human review required; this suggestion is advisory.</dd></div></dl></details>
             </div>
             <span className="action-status">{statusLabels[item.status] || item.status || "Unknown"}</span>
             {item.learner_id && <Link className="secondary-button" to={`/learners/${encodeURIComponent(item.learner_id)}?dataset_id=${encodeURIComponent(effectiveDatasetId)}`}>View learner <ArrowRight size={13}/></Link>}

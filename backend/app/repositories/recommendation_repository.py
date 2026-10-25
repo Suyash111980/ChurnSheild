@@ -15,11 +15,20 @@ def list_recommendations(
     learner_id: str | None = None,
     prediction_id: str | None = None,
     recommendation_status: str | None = None,
+    risk_level: str | None = None,
 ):
     if supabase is None:
         raise RuntimeError("database_unavailable")
+    prediction_relation = (
+        "prediction:predictions!inner(risk_probability, risk_category, model_version, created_at)"
+        if risk_level is not None
+        else "prediction:predictions(risk_probability, risk_category, model_version, created_at)"
+    )
     query = supabase.table("recommendations").select(
-        "*, learners!inner(dataset_id, external_learner_id, code_module, code_presentation)", count="exact"
+        "id, learner_id, prediction_id, rule_id, action, reason, status, created_at, updated_at, "
+        "learners!inner(id, dataset_id, external_learner_id, code_module, code_presentation), "
+        f"{prediction_relation}",
+        count="exact",
     ).eq("learners.dataset_id", dataset_id)
     for field, value in (
         ("learner_id", learner_id),
@@ -28,6 +37,8 @@ def list_recommendations(
     ):
         if value is not None:
             query = query.eq(field, value)
+    if risk_level is not None:
+        query = query.eq("prediction.risk_category", risk_level)
     return (
         query.order("created_at", desc=True)
         .order("id", desc=True)

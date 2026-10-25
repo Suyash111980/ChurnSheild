@@ -170,6 +170,12 @@ def _get_authenticated_profile(
         raw_code = getattr(exc, "code", None)
 
         if (
+            isinstance(raw_code, int)
+            and not isinstance(raw_code, bool)
+            and 100 <= raw_code <= 599
+        ):
+            safe_code = str(raw_code)
+        elif (
             isinstance(raw_code, str)
             and raw_code.replace("_", "").isalnum()
         ):

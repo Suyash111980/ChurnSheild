@@ -1,15 +1,14 @@
 
-import { useCallback, useState } from "react";
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Eye,
   EyeOff,
+  ShieldCheck,
   ArrowRight,
   UserPlus,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import AnimatedLogo from "../components/common/AnimatedLogo";
-import LoginIntro from "../components/common/LoginIntro";
 
 export default function Signup() {
   const [form, setForm] = useState({
@@ -24,10 +23,9 @@ export default function Signup() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showSignupIntro, setShowSignupIntro] = useState(false);
 
+  const nav = useNavigate();
   const { signup } = useAuth();
-  const completeSignupIntro = useCallback(() => setShowSignupIntro(false), []);
 
   const update = (key) => (e) =>
     { setError(""); setForm((current) => ({ ...current, [key]: e.target.value })); };
@@ -73,12 +71,12 @@ export default function Signup() {
         requestAdmin,
       });
 
-      if (!data.session) {
+      if (data.session) {
+        nav("/dashboard", { replace: true });
+      } else {
         setMessage(
           "Account created. Check your email for a confirmation link before signing in."
         );
-        // Confirmation-required signup stays here; show the welcome before its confirmation message.
-        setShowSignupIntro(true);
       }
     } catch (err) {
       const message = String(err?.message || "");
@@ -91,11 +89,12 @@ export default function Signup() {
   };
 
   return (
-    <>
-    <main className="auth-page" inert={showSignupIntro ? true : undefined} aria-hidden={showSignupIntro || undefined}>
+    <main className="auth-page">
       <section className="auth-brand-panel">
         <div className="auth-brand">
-          <AnimatedLogo variant="auth" />
+          <div className="brand-icon">
+            <ShieldCheck size={22} />
+          </div>
           <span>
             Churn<span className="brand-accent">Shield</span>
           </span>
@@ -140,7 +139,9 @@ export default function Signup() {
 
       <section className="auth-main signup-main">
         <div className="auth-mobile-brand">
-          <AnimatedLogo variant="auth-mobile" />
+          <div className="brand-icon">
+            <ShieldCheck size={21} />
+          </div>
           Churn<span className="brand-accent">Shield</span>
         </div>
 
@@ -292,7 +293,5 @@ export default function Signup() {
         </div>
       </section>
     </main>
-    {showSignupIntro && <LoginIntro size="signup" onComplete={completeSignupIntro} />}
-    </>
   );
 }

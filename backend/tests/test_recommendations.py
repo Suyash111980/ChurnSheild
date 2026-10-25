@@ -67,13 +67,16 @@ def clear_overrides():
 
 
 def test_recommendations_are_paginated_and_filterable(monkeypatch):
+    learner_id = str(uuid4())
+    prediction_id = str(uuid4())
     fake = FakeRecommendationQuery([{
-        "id": RECOMMENDATION_ID, "status": "pending", "learner_id": "learner-uuid",
-        "prediction_id": "prediction-uuid", "action": "Offer a check-in", "reason": "Saved evidence.",
+        "id": RECOMMENDATION_ID, "status": "pending", "learner_id": learner_id,
+        "prediction_id": prediction_id, "rule_id": "check_in", "action": "Offer a check-in", "reason": "Saved evidence.",
         "learners": {
             "dataset_id": DATASET_ID, "external_learner_id": "00123",
             "code_module": "AAA", "code_presentation": "2014J",
         },
+        "prediction": {"risk_category": "high", "risk_probability": 0.82, "model_version": "model-v1"},
     }])
     monkeypatch.setattr(recommendation_repository, "supabase", fake)
     monkeypatch.setattr(
@@ -86,11 +89,13 @@ def test_recommendations_are_paginated_and_filterable(monkeypatch):
     }
 
     response = TestClient(app).get(
-        f"/api/v1/recommendations?dataset_id={DATASET_ID}&learner_id={uuid4()}&status=pending&limit=10&offset=5"
+        f"/api/v1/recommendations?dataset_id={DATASET_ID}&learner_id={learner_id}&prediction_id={prediction_id}&status=pending&risk_level=high&limit=10&offset=5"
     )
 
     assert response.status_code == 200
     assert "learners!inner" in fake.selected
+    assert "prediction:predictions" in fake.selected
+    assert "predictions!inner" in fake.selected
     assert response.json()["count"] == 1
     assert response.json()["status_counts"] == {
         "pending": 8, "in_progress": 2, "completed": 1, "dismissed": 0,
@@ -100,8 +105,67 @@ def test_recommendations_are_paginated_and_filterable(monkeypatch):
     assert "learners" not in response.json()["data"][0]
     assert fake.filters[0] == ("learners.dataset_id", DATASET_ID)
     assert fake.filters[1][0] == "learner_id"
-    assert fake.filters[2] == ("status", "pending")
+    assert fake.filters[2] == ("prediction_id", prediction_id)
+    assert fake.filters[3] == ("status", "pending")
+    assert fake.filters[4] == ("prediction.risk_category", "high")
     assert fake.requested_range == (5, 14)
+    assert response.json()["status_counts"] == {
+        "pending": 8, "in_progress": 2, "completed": 1, "dismissed": 0,
+    }
+    assert response.json()["data"][0]["learner"]["external_learner_id"] == "00123"
+    assert response.json()["data"][0]["prediction"]["risk_probability"] == 0.82
+
+
+def test_recommendation_risk_filter_rejects_unknown_values():
+    app.dependency_overrides[require_processed_dataset] = lambda: {
+        "id": DATASET_ID, "owner_id": str(uuid4()), "status": "processed"
+    }
+    response = TestClient(app).get(
+        f"/api/v1/recommendations?dataset_id={DATASET_ID}&risk_level=critical"
+    )
+    assert response.status_code == 422
+
+
+def test_status_totals_are_dataset_scoped_head_counts(monkeypatch):
+    expected = {"pending": 4, "in_progress": 3, "completed": 2, "dismissed": 1}
+    queries = []
+
+    class CountQuery:
+        def __init__(self):
+            self.filters = []
+            self.columns = None
+            self.options = None
+
+        def table(self, name):
+            assert name == "recommendations"
+            self.filters = []
+            queries.append(self)
+            return self
+
+        def select(self, columns, **options):
+            self.columns = columns
+            self.options = options
+            return self
+
+        def eq(self, field, value):
+            self.filters.append((field, value))
+            return self
+
+        def execute(self):
+            selected_status = next(value for field, value in self.filters if field == "status")
+            return SimpleNamespace(count=expected[selected_status], data=None)
+
+    monkeypatch.setattr(recommendation_repository, "supabase", CountQuery())
+    counts = recommendation_repository.count_recommendations_by_status(
+        dataset_id=DATASET_ID, learner_id="learner-1"
+    )
+
+    assert counts == expected
+    assert len(queries) == 4
+    for query in queries:
+        assert query.options == {"count": "exact", "head": True}
+        assert ("learners.dataset_id", DATASET_ID) in query.filters
+        assert ("learner_id", "learner-1") in query.filters
 
 
 def test_status_count_query_is_dataset_scoped_and_ignores_pagination_and_status_filter(monkeypatch):

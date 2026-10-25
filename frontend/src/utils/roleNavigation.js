@@ -1,14 +1,8 @@
-const MASTER_ADMIN_PATHS = new Set([
-  "/master-admin",
-  "/master-admin/oulad",
-  "/admin/users",
-]);
+const MASTER_ADMIN_PATHS = new Set(["/admin/users"]);
 
 export function roleRedirect(appRole, pathname) {
   if (appRole === "master_admin") {
-    return MASTER_ADMIN_PATHS.has(pathname) || !pathname.startsWith("/master-admin")
-      ? null
-      : "/master-admin";
+    return MASTER_ADMIN_PATHS.has(pathname) ? null : "/admin/users";
   }
   if (pathname === "/master-admin" || pathname.startsWith("/master-admin/")) {
     return "/dashboard";

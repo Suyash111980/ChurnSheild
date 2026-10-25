@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { AlertCircle, CheckCircle2, CloudUpload, FileSpreadsheet, FileText, RefreshCw, X } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import { deleteDataset, previewDataset, reprocessDataset, retryDataset, uploadDataset } from "../services/datasetService";
 import { submitDatasetRevision } from "../services/datasetServiceCore.js";
@@ -15,12 +16,43 @@ export default function DatasetImport({ mode = "default" }) {
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [dragActive, setDragActive] = useState(false);
   const [deleteState, setDeleteState] = useState({ busyId: null, message: "", error: "" });
   const busyRef = useRef(false);
+  const fileInputRef = useRef(null);
   const isOulad = mode === "oulad";
   const canUpload = ["admin", "master_admin"].includes(accountProfile?.app_role);
   const previewCanProcess = Boolean(preview?.validation?.descriptive_compatible) && !preview?.validation?.errors?.length;
-  const predictionReady = Boolean(preview?.validation?.prediction_compatible);
+  function selectFile(nextFile) {
+    if (!nextFile) return;
+    const extension = nextFile.name.split(".").pop()?.toLowerCase();
+    if (!["csv", "xlsx"].includes(extension)) {
+      setError("Choose a CSV or XLSX file. Other file types are not supported.");
+      return;
+    }
+    setFile(nextFile);
+    setPreview(null);
+    setResult(null);
+    setError("");
+  }
+  function clearFile() {
+    setFile(null);
+    setPreview(null);
+    setResult(null);
+    setError("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+  function formatFileSize(size) {
+    if (!Number.isFinite(size) || size < 0) return "Size unavailable";
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+  }
+  function formatUpdated(value) {
+    if (!value) return "Time unavailable";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  }
   function makeFormData() {
     const body = new FormData();
     body.append("file", file);
@@ -101,52 +133,29 @@ export default function DatasetImport({ mode = "default" }) {
   if (!canUpload) return <section className="panel"><h1>Administrator access required</h1><p>Dataset uploads are restricted to administrators.</p></section>;
   return <>
     <PageHeader eyebrow={isOulad ? "PLATFORM DATA" : "DATA WORKSPACE"} title={isOulad ? "Import prepared OULAD data" : "Add dataset"} subtitle={isOulad ? "Select the prepared OULAD feature CSV, validate its learner-course records, and process it in the Master Admin workspace." : "Upload a CSV or XLSX file, review validation, then process it for this account."} />
-    <section className="panel">
-      <label>Dataset name <input value={name} onChange={(event) => setName(event.target.value)} maxLength={120} placeholder="Optional display name" /></label>
-      {isOulad && <p className="form-subtitle">Choose <code>ml/data/processed/oulad_learner_features.csv</code> from this checkout. Upload is scoped to the signed-in Master Admin workspace and is never automatic.</p>}
-      <label>CSV or XLSX file <input type="file" accept=".csv,.xlsx" disabled={busy} onChange={(event) => { setFile(event.target.files?.[0] || null); setPreview(null); setResult(null); }} /></label>
-      <div className="heading-actions"><button className="secondary-button" disabled={!file || busy} onClick={inspect}>{busy ? "Checking…" : "Preview and validate"}</button><button className="primary-button" disabled={!file || busy || !previewCanProcess} onClick={process}>{busy ? "Processing…" : predictionReady ? "Upload and predict" : "Import descriptive-only"}</button></div>
-      {error && <p role="alert">{error}</p>}
-      {deleteState.message && <p role="status">{deleteState.message}</p>}
-      {deleteState.error && <p role="alert">{deleteState.error}</p>}
-      {preview && <div className="dataset-validation">
-        <h2>Validation</h2>
-        <p><strong>File:</strong> {preview.filename} · {file?.type || file?.name?.split(".").pop()?.toUpperCase() || "Unknown format"}</p>
-        <p><strong>Size and shape:</strong> {Math.ceil((preview.file_size_bytes || file?.size || 0) / 1024).toLocaleString()} KB · {preview.row_count} rows · {preview.columns?.length || 0} columns</p>
-        <p><strong>Rows:</strong> {preview.validation?.rows_retained ?? 0} retained · {preview.validation?.rows_rejected ?? 0} rejected · {preview.validation?.rows_skipped ?? 0} skipped · {preview.validation?.rows_with_recoverable_missing_values ?? 0} need saved-model imputation</p>
-        <p><strong>Compatibility:</strong> {preview.validation?.descriptive_compatible ? "Descriptive ready" : "Not compatible with descriptive analytics"} · {predictionReady ? "ML prediction ready" : "Descriptive-only; no predictions will be generated"}</p>
-        {Boolean(preview.validation?.missing_prediction_columns?.length) && <p role="alert"><strong>Missing required model features:</strong> {preview.validation.missing_prediction_columns.join(", ")}</p>}
-        {preview.validation?.errors?.map((item, index) => <p role="alert" key={`${item.code}-${item.column || index}`}>{item.message}</p>)}
-        {preview.validation?.warnings?.map((item, index) => <p key={`${item.code}-${index}`}>{item.message}{item.columns?.length ? `: ${item.columns.join(", ")}` : ""}</p>)}
-        {Boolean(Object.values(preview.validation?.missing_value_counts || {}).some(Number)) && <div><h3>Missing values</h3><ul>{Object.entries(preview.validation.missing_value_counts).filter(([, count]) => count > 0).map(([column, count]) => <li key={column}>{column}: {count}</li>)}</ul><p>Recoverable feature values are handled by the model’s saved training-fitted preprocessing pipeline. Missing learner keys or absent required feature columns prevent predictions.</p></div>}
-        {preview.validation?.invalid_values?.length > 0 && <div><h3>Invalid values</h3><ul>{preview.validation.invalid_values.map((item, index) => <li key={`${item.code}-${item.column || index}`}>{item.message}</li>)}</ul></div>}
-        {preview.validation?.data_types && <details><summary>Detected column types</summary><pre>{JSON.stringify(preview.validation.data_types, null, 2)}</pre></details>}
-        {preview.preview_rows?.length > 0 && <details><summary>Preview first {preview.preview_rows.length} rows</summary><pre>{JSON.stringify(preview.preview_rows, null, 2)}</pre></details>}
-      </div>}
-      {result && <div role="status">
-        <h2>{result.data?.status === "failed" ? "Processing failed" : result.validation?.prediction_state === "available" ? "Predictions saved" : result.data?.status === "processed" ? "Learner data saved; predictions unavailable" : "Dataset status updated"}</h2>
-        <p>{result.data?.status} · {result.data?.row_count ?? 0} learner records</p>
-        {result.validation?.processing_state && <p><strong>Workflow state:</strong> {result.validation.processing_state}{result.validation.failed_stage ? ` · stopped during ${result.validation.failed_stage}` : ""}</p>}
-        {result.validation?.source_revision_created && <p>This source content differs from, or could not be verified against, the prior revision. It was saved as a new dataset so the previous dataset and results remain intact.</p>}
-        {result.data?.error_summary && <p>{result.data.error_summary}</p>}
-        {result.validation?.prediction_state && <p><strong>Prediction status:</strong> {result.validation.prediction_state} · {result.validation.predictions_persisted ?? 0} saved of {result.data?.row_count ?? 0} rows</p>}
-        {result.validation?.prediction_state && <p><strong>Prediction rows skipped:</strong> {result.validation.prediction_rows_skipped ?? 0} · <strong>Rows handled by saved preprocessing:</strong> {result.validation.rows_cleaned_by_model_pipeline ?? 0}</p>}
-        {result.validation?.prediction_message && <p role="alert">{result.validation.prediction_message}</p>}
-        {result.validation?.prediction_error && <p role="alert">{result.validation.prediction_error}</p>}
-        {result.validation?.explanations_state && <p>Explanations: {result.validation.explanations_state} · {result.validation.explanations_persisted ?? 0} saved</p>}
-        {result.validation?.recommendations_state && <p>Recommendations: {result.validation.recommendations_state} · {result.validation.recommendations_persisted ?? 0} saved</p>}
-        {["processed", "failed"].includes(result.data?.status) && file && <button className="secondary-button" disabled={busy} onClick={retryOrReprocess}>{busy ? "Submitting…" : result.data.status === "failed" ? "Retry processing" : "Reprocess same dataset"}</button>} <Link to="/dashboard">Open dataset workspace</Link>
-      </div>}
+    <section className="panel dataset-upload-card" aria-labelledby="dataset-upload-heading">
+      <div className="dataset-section-heading"><div><span className="dataset-step-label">DATASET INGESTION</span><h2 id="dataset-upload-heading">Upload a dataset</h2><p>Validate the file before processing it for this workspace.</p></div><span className="dataset-format-badge">CSV · XLSX</span></div>
+      <label className="dataset-name-field"><span>Dataset name <small>Optional</small></span><input value={name} onChange={(event) => setName(event.target.value)} maxLength={120} placeholder="Give this dataset a clear name" /></label>
+      {isOulad && <p className="dataset-upload-note">Choose <code>ml/data/processed/oulad_learner_features.csv</code> from this checkout. Upload is scoped to the signed-in Master Admin workspace and is never automatic.</p>}
+      <div className={`dataset-dropzone${dragActive ? " drag-active" : ""}${file ? " has-file" : ""}${busy ? " is-busy" : ""}`}
+        onDragEnter={(event) => { event.preventDefault(); if (!busy) setDragActive(true); }}
+        onDragOver={(event) => { event.preventDefault(); if (!busy) setDragActive(true); }}
+        onDragLeave={(event) => { event.preventDefault(); if (!event.currentTarget.contains(event.relatedTarget)) setDragActive(false); }}
+        onDrop={(event) => { event.preventDefault(); setDragActive(false); if (!busy) selectFile(event.dataTransfer.files?.[0]); }}>
+        <input ref={fileInputRef} className="dataset-file-input" type="file" accept=".csv,.xlsx" aria-label="Choose a CSV or XLSX dataset file" tabIndex={-1} disabled={busy} onChange={(event) => selectFile(event.target.files?.[0])} />
+        {!file ? <div className="dataset-drop-prompt"><span className="dataset-upload-icon"><CloudUpload size={27}/></span><strong>Drop your dataset here</strong><span>or choose a file from your device</span><button className="secondary-button dataset-choose-button" type="button" disabled={busy} onClick={() => fileInputRef.current?.click()}>Choose CSV / Excel file</button><small>Accepted formats: .csv and .xlsx</small></div> : <div className="dataset-selected-file"><span className="dataset-file-icon">{file.name.toLowerCase().endsWith(".xlsx") ? <FileSpreadsheet size={22}/> : <FileText size={22}/>}</span><div className="dataset-file-details"><strong title={file.name}>{file.name}</strong><span>{formatFileSize(file.size)} <i/> {file.name.toLowerCase().endsWith(".xlsx") ? "Excel workbook (.xlsx)" : "CSV file (.csv)"}</span></div><button className="dataset-remove-file" type="button" disabled={busy} onClick={clearFile} aria-label={`Remove ${file.name}`}><X size={17}/><span>Change file</span></button></div>}
+      </div>
+      <div className="dataset-upload-actions"><button className="secondary-button" type="button" disabled={!file || busy} onClick={inspect}>{busy ? <><RefreshCw size={15} className="dataset-spin"/>Checking…</> : "Preview & validate"}</button><button className="primary-button" type="button" disabled={!file || busy || !previewCanProcess} onClick={process}>{busy ? <><RefreshCw size={15} className="dataset-spin"/>Upload & process</> : <><CloudUpload size={16}/>Upload & process</>}</button></div>
+      {error && <div className="dataset-feedback dataset-feedback-error" role="alert"><AlertCircle size={17}/><span>{error}</span></div>}
+      {deleteState.message && <div className="dataset-feedback dataset-feedback-result" role="status">{deleteState.message}</div>}
+      {deleteState.error && <div className="dataset-feedback dataset-feedback-error" role="alert">{deleteState.error}</div>}
+      {preview && <section className="dataset-validation-result" aria-labelledby="dataset-validation-heading"><div className="dataset-section-heading"><div><h3 id="dataset-validation-heading">Validation result</h3><p>{preview.row_count} rows · {(preview.columns || []).length} columns detected</p></div><span className={`dataset-validation-badge ${previewCanProcess ? "valid" : "invalid"}`}>{previewCanProcess ? <CheckCircle2 size={15}/> : <AlertCircle size={15}/>}{previewCanProcess ? "Ready to process" : "Needs attention"}</span></div><div className="dataset-compatibility"><span className={preview.validation?.descriptive_compatible ? "compatible" : "incompatible"}>{preview.validation?.descriptive_compatible ? "Descriptive analytics compatible" : "Not compatible with descriptive analytics"}</span><span className={preview.validation?.prediction_compatible ? "compatible" : "incompatible"}>{preview.validation?.prediction_compatible ? "Prediction compatible" : "Not compatible with current predictive model"}</span></div>{preview.validation?.errors?.map((item) => <p className="dataset-validation-message error" role="alert" key={item.message}>{item.message}</p>)}{preview.validation?.warnings?.map((item) => <p className="dataset-validation-message" key={item.code}>{item.message}</p>)}<details className="dataset-preview-details"><summary>Preview detected columns and sample rows</summary><p className="dataset-column-list">{(preview.columns || []).join(" · ")}</p><pre>{JSON.stringify(preview.preview_rows, null, 2)}</pre></details></section>}
+      {result && <div className="dataset-feedback dataset-feedback-result" role="status"><div><h3>{result.data?.status === "processed" ? "Processing complete" : result.data?.status === "failed" ? "Processing failed" : "Dataset status updated"}</h3><p>{result.data?.status} · {result.data?.row_count ?? 0} records</p>{result.data?.error_summary && <p>{result.data.error_summary}</p>}{result.validation?.prediction_state && <p>Prediction status: {result.validation.prediction_state} · persisted: {result.validation.predictions_persisted ?? 0}</p>}</div><div className="dataset-result-actions">{["processed", "failed"].includes(result.data?.status) && file && <button className="secondary-button" type="button" disabled={busy} onClick={retryOrReprocess}>{busy ? "Submitting…" : result.data.status === "failed" ? "Retry processing" : "Reprocess same dataset"}</button>}<Link className="text-button" to="/dashboard">Open dataset workspace</Link></div></div>}
     </section>
-    <section className="panel">
-      <div className="panel-heading"><div><h2>Available datasets</h2><p>Owner-scoped records returned by the dataset API.</p></div><button className="secondary-button" type="button" onClick={() => refresh().catch((reason) => setError(reason.message))}>Refresh</button></div>
-      {datasetsLoading ? <p role="status">Loading dataset records…</p> : datasetsError ? <div role="alert"><p>Dataset records are unavailable. The workspace may not be empty.</p><button className="secondary-button" type="button" onClick={() => refresh().catch((reason) => setError(reason.message))}>Retry dataset list</button></div> : datasets.length === 0 ? <p>No datasets have been returned for this workspace.</p> : <div className="action-list">{datasets.map((item) => <article className="action-row" key={item.id}>
-        <div className="action-copy"><strong>{item.dataset_name}</strong><span>{item.filename} · {item.row_count ?? "Unknown"} rows · updated {item.updated_at || item.uploaded_at || "time unavailable"}</span>{item.error_summary && <span role="alert">{item.error_summary}</span>}</div>
-        <span className="action-status">{item.status} · {item.prediction_compatible ? "prediction compatible" : "no prediction compatibility"}</span>
-        {datasetId === item.id ? <span className="status-badge status-active">Selected</span> : <button type="button" className="secondary-button" onClick={() => selectDataset(item.id)}>Select</button>}
-        {item.status === "processed" && file && <button type="button" className="secondary-button" disabled={busy || !previewCanProcess} onClick={() => processExisting(item)}>Reprocess with selected file</button>}
-        {item.status === "failed" && file && <button type="button" className="secondary-button" disabled={busy || !previewCanProcess} onClick={() => processExisting(item)}>Retry with selected file</button>}
-        <button type="button" className="secondary-button" disabled={busy || Boolean(deleteState.busyId) || item.status === "processing"} onClick={() => removeDataset(item)} aria-label={`Delete dataset ${item.dataset_name}`}>{deleteState.busyId === item.id ? "Deleting…" : "Delete dataset"}</button>
+    <section className="panel dataset-list-card" aria-labelledby="available-datasets-heading">
+      <div className="dataset-section-heading"><div><span className="dataset-step-label">WORKSPACE LIBRARY</span><h2 id="available-datasets-heading">Available datasets</h2><p>Owner-scoped datasets available in this workspace.</p></div><button className="secondary-button dataset-refresh-button" type="button" disabled={datasetsLoading} aria-busy={datasetsLoading} onClick={() => refresh().catch((reason) => setError(reason.message))}><RefreshCw size={15} className={datasetsLoading ? "dataset-spin" : ""}/>{datasetsLoading ? "Refreshing…" : "Refresh"}</button></div>
+      {datasetsLoading ? <div className="dataset-list-state" role="status"><span className="dataset-state-spinner"/><strong>Loading datasets</strong><span>Retrieving your workspace metadata.</span></div> : datasetsError ? <div className="dataset-list-state error" role="alert"><AlertCircle size={22}/><strong>Dataset list unavailable</strong><span>The workspace may not be empty. Try refreshing the list.</span><button className="secondary-button" type="button" onClick={() => refresh().catch((reason) => setError(reason.message))}>Retry dataset list</button></div> : datasets.length === 0 ? <div className="dataset-list-state"><span className="dataset-empty-icon"><FileSpreadsheet size={21}/></span><strong>No datasets yet</strong><span>Uploaded datasets for this workspace will appear here.</span></div> : <div className="dataset-list">{datasets.map((item) => <article className={`dataset-row${datasetId === item.id ? " selected" : ""}`} key={item.id}>
+        <span className="dataset-row-icon"><FileSpreadsheet size={19}/></span><div className="dataset-row-main"><div className="dataset-row-title"><strong>{item.dataset_name || item.filename || "Untitled dataset"}</strong>{datasetId === item.id && <span className="dataset-pill selected-pill">Selected</span>}{item.status === "processed" && <span className="dataset-pill processed-pill">Processed</span>}{item.prediction_compatible && <span className="dataset-pill compatible-pill">Prediction compatible</span>}</div><span className="dataset-filename" title={item.filename}>{item.filename || "Filename unavailable"}</span><div className="dataset-row-meta"><span>{item.row_count != null && Number.isFinite(Number(item.row_count)) ? `${Number(item.row_count).toLocaleString()} rows` : "Row count unavailable"}</span><i/><span>Updated {formatUpdated(item.updated_at || item.uploaded_at)}</span></div>{item.error_summary && <span className="dataset-row-error" role="alert">{item.error_summary}</span>}</div><span className={`dataset-pill status-pill status-${String(item.status || "unknown").toLowerCase()}`}>{item.status || "Unknown status"}</span><div className="dataset-row-actions">{datasetId === item.id ? <span className="dataset-selected-control"><CheckCircle2 size={15}/>Selected</span> : <button type="button" className="secondary-button" onClick={() => selectDataset(item.id)}>Select</button>}{item.status === "processed" && file && <button type="button" className="secondary-button" disabled={busy || !previewCanProcess} onClick={() => processExisting(item)}>Reprocess</button>}{item.status === "failed" && file && <button type="button" className="secondary-button" disabled={busy || !previewCanProcess} onClick={() => processExisting(item)}>Retry processing</button>}<button type="button" className="secondary-button dataset-delete-button" disabled={busy || Boolean(deleteState.busyId) || item.status === "processing"} onClick={() => removeDataset(item)} aria-label={`Delete dataset ${item.dataset_name}`}>{deleteState.busyId === item.id ? "Deleting…" : "Delete dataset"}</button></div>
       </article>)}</div>}
     </section>
   </>;
