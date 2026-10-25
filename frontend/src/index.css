@@ -16,3 +16,22 @@
 .action-edge.neutral{background:#c5ccd7}
 .metric-icon.red{background:#fff0f2;color:#e7465b}.dashboard-dataset-select select{height:38px;max-width:230px;border:1px solid #dbe1eb;border-radius:7px;background:#fff;color:#33415b;padding:0 30px 0 12px;font-size:10px}.dashboard-dataset-select select:focus-visible{outline:3px solid #a89aff;outline-offset:2px}
 .feature-row>span small{display:block;font-size:8px;color:#8190a4;font-weight:400;margin-top:3px}
+
+.topbar-logout-button {
+  min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 11px;
+  border: 1px solid #e4e8f0; border-radius: 8px; background: #fff; color: #536078; font-size: 12px; font-weight: 620;
+}
+.topbar-logout-button:hover:not(:disabled) { border-color: #d6ccff; background: #faf9ff; color: #6948f5; }
+.topbar-logout-button:disabled { cursor: wait; opacity: .65; }
+:root[data-theme="dark"] .topbar-logout-button { border-color: #35435a; background: #172235; color: #d3dbee; }
+:root[data-theme="dark"] .topbar-logout-button:hover:not(:disabled) { border-color: #7964dd; background: #202d43; color: #c7baff; }
+@media(max-width:760px) {
+  .topbar-logout-button { width: 34px; min-width: 34px; padding: 0; }
+  .topbar-logout-button span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+}
+
+/* Align the Workspace heading with the sidebar wordmark, not the logo mark. */
+.sidebar .workspace-label { padding-left: 57px; position: relative; top: -3px; }
+
+.signup-options { display: grid; gap: 4px; margin: 10px 0 13px; }
+.signup-options .check-row { margin: 0; }

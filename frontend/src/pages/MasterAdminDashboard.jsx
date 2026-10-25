@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiRequest } from "../services/apiClient";
 import { datasetStatusMessage, overviewErrorMessage, overviewMetricValue } from "../utils/masterAdminOverview";
+import { usePageTransitionReady } from "../context/NavigationTransitionContext";
 
 export default function MasterAdminDashboard() {
   const [overview, setOverview] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [reload, setReload] = useState(0);
+  usePageTransitionReady(!loading);
   useEffect(() => {
     let active = true;
     setLoading(true);

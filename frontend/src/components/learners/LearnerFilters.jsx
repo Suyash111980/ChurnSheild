@@ -3,10 +3,6 @@ import { Search, X } from "lucide-react";
 export default function LearnerFilters({
   search,
   onSearchChange,
-  module,
-  onModuleChange,
-  presentation,
-  onPresentationChange,
   risk,
   onRiskChange,
   onClear,
@@ -24,8 +20,6 @@ export default function LearnerFilters({
         />
       </label>
       <div className="filter-row">
-        <label className="filter-select-label"><span className="sr-only">Filter by module</span><input value={module} onChange={(event) => onModuleChange(event.target.value)} placeholder="Module" maxLength={16} /></label>
-        <label className="filter-select-label"><span className="sr-only">Filter by presentation</span><input value={presentation} onChange={(event) => onPresentationChange(event.target.value)} placeholder="Presentation" maxLength={16} /></label>
         <label className="filter-select-label"><span className="sr-only">Filter by saved risk category</span><select value={risk} onChange={(event) => onRiskChange(event.target.value)}><option value="">All risk categories</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
         {hasFilters && (
           <button className="secondary-button clear-filter-button" type="button" onClick={onClear}>

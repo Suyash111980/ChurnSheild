@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
 import PageHeader from "../components/layout/PageHeader";
+import { usePageTransitionReady } from "../context/NavigationTransitionContext";
 
 export default function OuladOverview() {
+  usePageTransitionReady(true);
   return <>
     <PageHeader
       eyebrow="PLATFORM DATA"

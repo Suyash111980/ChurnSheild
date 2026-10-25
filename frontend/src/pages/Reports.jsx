@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { FileSpreadsheet, Lightbulb, UsersRound } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
+import { usePageTransitionReady } from "../context/NavigationTransitionContext";
 import { useDataset } from "../context/DatasetContext";
 import { useAuth } from "../context/AuthContext";
 import { getDashboardSummary } from "../services/dashboardService";
@@ -22,7 +23,7 @@ function ReportCard({ Icon, title, description, available, action, error, busy =
 }
 
 export default function Reports() {
-  const { datasetId, dataset } = useDataset();
+  const { datasetId, dataset, loading: datasetsLoading } = useDataset();
   const { accountProfile } = useAuth();
   const [availability, setAvailability] = useState({ datasetId: null, loading: false, error: null, learnerCount: 0, predictionCount: 0, recommendationCount: 0 });
   const [busy, setBusy] = useState("");
@@ -71,6 +72,7 @@ export default function Reports() {
   const hasPredictions = Boolean(counts?.predictionCount);
   const hasRecommendations = Boolean(counts?.recommendationCount);
   const canExport = accountProfile?.app_role === "admin";
+  usePageTransitionReady(!datasetsLoading && !loading);
 
   return <><PageHeader eyebrow="REPORTING CENTER" title="Reports" subtitle="Export saved learner, risk, and retention records for the selected dataset."/>
     <section className="panel report-filters"><div><strong>Selected dataset</strong><p>{dataset?.dataset_name || "Exports are scoped to the active workspace dataset."}</p></div><span className="status-badge status-active"><i/> {datasetId ? "Dataset selected" : "Select a dataset"}</span></section>

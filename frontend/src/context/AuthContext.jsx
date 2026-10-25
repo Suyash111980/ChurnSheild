@@ -13,6 +13,10 @@ export function AuthProvider({ children }) {
   const [profileErrorDetail, setProfileErrorDetail] = useState(null);
   const [authFlowInProgress, setAuthFlowInProgress] = useState(false);
   const [authIntroIntent, setAuthIntroIntent] = useState(null);
+  const [passwordRecovery, setPasswordRecovery] = useState(() => {
+    try { return window.sessionStorage.getItem("churnshield-password-recovery") === "true"; }
+    catch { return false; }
+  });
 
   const refreshAccountProfile = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setProfileLoading(true);
@@ -74,7 +78,16 @@ export function AuthProvider({ children }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       setUser(session?.user ?? null);
+      if (event === "PASSWORD_RECOVERY") {
+        setPasswordRecovery(true);
+        try { window.sessionStorage.setItem("churnshield-password-recovery", "true"); } catch { /* Recovery remains available for this mount. */ }
+      } else if (event === "SIGNED_IN") {
+        setPasswordRecovery(false);
+        try { window.sessionStorage.removeItem("churnshield-password-recovery"); } catch { /* Ignore unavailable storage. */ }
+      }
       if (!session) {
+        setPasswordRecovery(false);
+        try { window.sessionStorage.removeItem("churnshield-password-recovery"); } catch { /* Ignore unavailable storage. */ }
         profileLoadId += 1;
         setAccountProfile(null);
         setProfileErrorStatus(null);
@@ -159,6 +172,10 @@ export function AuthProvider({ children }) {
   }
 
   const consumeAuthIntro = useCallback(() => setAuthIntroIntent(null), []);
+  const clearPasswordRecovery = useCallback(() => {
+    setPasswordRecovery(false);
+    try { window.sessionStorage.removeItem("churnshield-password-recovery"); } catch { /* Ignore unavailable storage. */ }
+  }, []);
 
   async function logout() {
     const { error } = await supabase.auth.signOut();
@@ -176,6 +193,8 @@ export function AuthProvider({ children }) {
       profileLoading,
       authFlowInProgress,
       authIntroIntent,
+      passwordRecovery,
+      clearPasswordRecovery,
       consumeAuthIntro,
       isAuthenticated: Boolean(user),
       signup,

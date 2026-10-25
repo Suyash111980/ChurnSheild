@@ -4,6 +4,7 @@ import PageHeader from "../components/layout/PageHeader";
 import { useDataset } from "../context/DatasetContext";
 import LoadingState from "../components/common/LoadingState";
 import ErrorState from "../components/common/ErrorState";
+import { usePageTransitionReady } from "../context/NavigationTransitionContext";
 import { getCourseInsights } from "../services/dashboardService";
 import "./CourseInsights.css";
 
@@ -11,7 +12,7 @@ const percent = (value) => value == null ? "—" : `${(value * 100).toFixed(1)}%
 const probability = (value) => value == null ? "—" : `${(value * 100).toFixed(1)}%`;
 
 export default function CourseInsights() {
-  const { dataset, datasetId } = useDataset();
+  const { dataset, datasetId, loading: datasetsLoading } = useDataset();
   const [result, setResult] = useState({ datasetId: null, data: null, error: null, loading: true });
   const [refreshId, setRefreshId] = useState(0);
 
@@ -32,6 +33,7 @@ export default function CourseInsights() {
   const current = result.datasetId === datasetId;
   const loading = Boolean(datasetId) && (!current || result.loading);
   const data = current ? result.data : null;
+  usePageTransitionReady(!datasetsLoading && !loading);
 
   return <div className="course-insights-page">
     <PageHeader eyebrow="COURSE PERFORMANCE" title="Course Insights" subtitle={`Saved prediction coverage and risk by course for ${dataset?.dataset_name || "the selected dataset"}.`} />

@@ -1,0 +1,82 @@
+.auth-logo-stage {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  isolation: isolate;
+  background: #111827;
+}
+.auth-logo-stage--hero {
+  width: clamp(94px, 25vw, 124px);
+  aspect-ratio: 642 / 709;
+  margin: 0 auto 15px;
+}
+.auth-logo-base,
+.auth-logo-arrow-layer {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.auth-logo-base { z-index: 0; }
+.auth-logo-arrow-layer { z-index: 1; transform-origin: center; }
+.auth-logo-stage--hero.is-animated .auth-logo-arrow-layer {
+  animation: auth-logo-arrow-enter 1280ms cubic-bezier(.16, .82, .24, 1) 120ms both;
+  will-change: transform, filter;
+}
+.auth-logo-stage--brand { width: 37px; height: 37px; margin: 0; border-radius: 11px; }
+.auth-logo-stage--brand .auth-logo-base,
+.auth-logo-stage--brand .auth-logo-arrow-layer { border-radius: inherit; }
+@keyframes auth-logo-arrow-enter {
+  0% { transform: translate(-100%, 55%) scale(.985); filter: drop-shadow(0 0 0 rgb(184 164 255 / 0%)); }
+  72% { transform: translate(1.1%, -.6%) scale(1.018); filter: drop-shadow(0 0 5px rgb(184 164 255 / 72%)); }
+  86% { transform: translate(-.45%, .25%) scale(.997); filter: drop-shadow(0 0 3px rgb(184 164 255 / 38%)); }
+  100% { transform: none; filter: none; }
+}
+@media (max-width: 760px) {
+  .auth-logo-stage--hero { width: clamp(82px, 28vw, 108px); margin-bottom: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-logo-stage--hero.is-animated .auth-logo-arrow-layer {
+    animation: none !important;
+    transform: none;
+    filter: none;
+    will-change: auto;
+  }
+}
+@media (max-width: 760px) {
+  .auth-mobile-brand .auth-logo-stage--brand { width: 30px; height: 30px; }
+}
+.auth-brand-animated { animation: auth-lockup-enter 560ms cubic-bezier(.2, .7, .2, 1) both; }
+.auth-brand-animated .auth-brand-name {
+  display: inline-block;
+  animation: auth-wordmark-enter 520ms cubic-bezier(.2, .7, .2, 1) 90ms both;
+}
+.auth-logo-stage--brand.is-animated .auth-logo-arrow-layer {
+  animation: auth-brand-arrow-enter 920ms cubic-bezier(.16, .82, .24, 1) 100ms both;
+}
+@keyframes auth-lockup-enter {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes auth-wordmark-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes auth-brand-arrow-enter {
+  0% { transform: translate(-105%, 58%) scale(.98); filter: none; }
+  72% { transform: translate(1.6%, -.9%) scale(1.045); filter: drop-shadow(0 0 4px rgb(184 164 255 / 70%)); }
+  88% { transform: translate(-.45%, .25%) scale(.995); filter: drop-shadow(0 0 2px rgb(184 164 255 / 35%)); }
+  100% { transform: none; filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-brand-animated,
+  .auth-brand-animated .auth-brand-name,
+  .auth-logo-stage--brand.is-animated .auth-logo-arrow-layer {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}

@@ -4,11 +4,11 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   Eye,
   EyeOff,
-  ShieldCheck,
   ArrowRight,
   UserPlus,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import AnimatedAuthLogo from "../components/common/AnimatedAuthLogo";
 
 export default function Signup() {
   const [form, setForm] = useState({
@@ -91,11 +91,9 @@ export default function Signup() {
   return (
     <main className="auth-page">
       <section className="auth-brand-panel">
-        <div className="auth-brand">
-          <div className="brand-icon">
-            <ShieldCheck size={22} />
-          </div>
-          <span>
+        <div className="auth-brand auth-brand-animated">
+          <AnimatedAuthLogo variant="brand" decorative animated />
+          <span className="auth-brand-name">
             Churn<span className="brand-accent">Shield</span>
           </span>
         </div>
@@ -138,11 +136,9 @@ export default function Signup() {
       </section>
 
       <section className="auth-main signup-main">
-        <div className="auth-mobile-brand">
-          <div className="brand-icon">
-            <ShieldCheck size={21} />
-          </div>
-          Churn<span className="brand-accent">Shield</span>
+        <div className="auth-mobile-brand auth-brand-animated">
+          <AnimatedAuthLogo variant="brand" decorative animated />
+          <span className="auth-brand-name">Churn<span className="brand-accent">Shield</span></span>
         </div>
 
         <div className="auth-form-wrap">
@@ -166,11 +162,7 @@ export default function Signup() {
           </div>
 
           <form onSubmit={submit} noValidate aria-busy={loading}>
-            <label className="check-row terms-row">
-              <input type="checkbox" checked={requestAdmin} onChange={(event) => setRequestAdmin(event.target.checked)} />
-              <span className="checkmark" />
-              Request an Admin workspace (approval required)
-            </label>
+            
             <label className="field-label" htmlFor="name">
               Full name
             </label>
@@ -243,15 +235,22 @@ export default function Signup() {
               />
             </div>
 
-            <label className="check-row terms-row">
-              <input
-                type="checkbox"
-                checked={terms}
-                onChange={(e) => setTerms(e.target.checked)}
-              />
-              <span className="checkmark" />
-              I agree to the terms and understand this is a ChurnShield account.
-            </label>
+            <div className="signup-options">
+              <label className="check-row terms-row">
+                <input
+                  type="checkbox"
+                  checked={terms}
+                  onChange={(e) => setTerms(e.target.checked)}
+                />
+                <span className="checkmark" />
+                I agree to the terms and understand this is a ChurnShield account.
+              </label>
+              <label className="check-row terms-row">
+                <input type="checkbox" checked={requestAdmin} onChange={(event) => setRequestAdmin(event.target.checked)} />
+                <span className="checkmark" />
+                Request an Admin workspace (approval required)
+              </label>
+            </div>
 
             {error && (
               <div id="signup-error" className="form-error" role="alert">
