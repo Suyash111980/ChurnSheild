@@ -184,7 +184,36 @@ def delete_owned_dataset(dataset_id: str, owner_id: str, workspace_id: str, acce
         .execute()
     )
     rows = response.data or []
-    return rows[0] if rows else None
+    if rows:
+        return rows[0]
+
+    # Diagnose an empty DELETE result through the trusted server client, scoped
+    # to the same owner/workspace. Never log the dataset ID or identity values.
+    try:
+        scoped_rows = (
+            _client().table("dataset_uploads")
+            .select("status")
+            .eq("id", dataset_id)
+            .eq("owner_id", owner_id)
+            .eq("workspace_id", workspace_id)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        if not scoped_rows:
+            reason = "not_found_or_scope_mismatch"
+        elif scoped_rows[0].get("status") == "processing":
+            reason = "processing"
+        else:
+            reason = "policy_denied_or_concurrent_change"
+        logger.info("Dataset deletion returned no row (reason=%s)", reason)
+    except Exception as exc:
+        logger.warning(
+            "Dataset deletion returned no row; diagnosis unavailable (exception_type=%s)",
+            type(exc).__name__,
+        )
+    return None
 
 
 def upsert_learners(records: list[dict]) -> list[dict]:

@@ -5,6 +5,7 @@ from typing import Any
 
 from app.repositories import learner_repository
 from app.repositories import prediction_repository
+from app.services.recommendation_service import recommendation_to_api_record
 from app.services.student_display_service import (
     attach_student_names,
     get_student_name,
@@ -72,6 +73,10 @@ def get_learner_profile(
         learner_id,
         dataset_id,
     )
+    recommendation_rows = [
+        {**recommendation_to_api_record(row), "learners": row.get("learners")}
+        for row in (recommendations.data or [])
+    ]
 
     learner = {
         key: value
@@ -85,7 +90,7 @@ def get_learner_profile(
         "latest_feature_snapshot": feature,
         "latest_prediction": prediction,
         "risk_explanations": explanations,
-        "recommendations": recommendations.data or [],
+        "recommendations": recommendation_rows,
     }
 
 

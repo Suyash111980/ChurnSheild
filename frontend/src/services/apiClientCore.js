@@ -55,6 +55,7 @@ export function createApiClient({ supabase, baseUrl, fetchImpl = fetch }) {
       }
       throw new ApiRequestError(response.status, detail);
     }
+    if (response.status === 204) return null;
     return response.json();
   }
 

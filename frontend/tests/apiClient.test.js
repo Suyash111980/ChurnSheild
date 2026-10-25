@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { createApiClient } from "../src/services/apiClientCore.js";
+import { createDatasetService } from "../src/services/datasetServiceCore.js";
 
 function mockSupabase({ token = null, refreshedToken = null, refreshError = null } = {}) {
   const calls = { getSession: 0, refreshSession: 0, signOut: 0 };
@@ -31,6 +32,18 @@ function response(status, body = "{}") {
 }
 
 describe("authenticated API client", () => {
+  it("accepts a 204 No Content delete response without trying to parse JSON", async () => {
+    const { supabase } = mockSupabase({ token: "delete-token" });
+    const client = createApiClient({
+      supabase,
+      baseUrl: "http://api.test/v1",
+      fetchImpl: async () => new Response(null, { status: 204 }),
+    });
+    const datasets = createDatasetService(client.apiRequest);
+
+    assert.equal(await datasets.deleteDataset("dataset-1"), null);
+  });
+
   it("attaches the current access token to backend requests", async () => {
     const { supabase } = mockSupabase({ token: "test-access-token" });
     let requestOptions;
