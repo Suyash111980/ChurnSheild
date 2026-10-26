@@ -15,6 +15,15 @@ def test_default_cors_allowlist_covers_both_vite_local_ports(monkeypatch):
     assert "*" not in configured.cors_origin_list
 
 
+def test_supabase_defaults_fail_closed_without_project_credentials():
+    configured = Settings(_env_file=None)
+
+    assert configured.supabase_url == ""
+    assert configured.supabase_publishable_key == ""
+    assert configured.expected_jwt_issuer == ""
+    assert configured.supabase_jwks_url == ""
+
+
 def test_app_cors_middleware_uses_explicit_origins_and_auth_headers():
     middleware = next(layer for layer in app.user_middleware if layer.cls is CORSMiddleware)
     options = middleware.kwargs

@@ -10,8 +10,10 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 class Settings(BaseSettings):
     app_env: str = "development"
     cors_origins: str = "http://localhost:5173,http://localhost:5174"
-    supabase_url: str = "https://ilqiatthvjkgfajwlaoa.supabase.co/rest/v1/"
-    supabase_publishable_key: str = "sb_publishable_pkDmjrmnotgQ4W7mjSkgoQ_GO9sNa0c"
+    # Require the deployment to name its Supabase project explicitly. A baked-in
+    # fallback can silently direct authentication/JWKS requests at the wrong project.
+    supabase_url: str = ""
+    supabase_publishable_key: str = ""
     supabase_secret_key: str = ""
     supabase_jwt_issuer: str = ""
     supabase_jwt_algorithm: str = "ES256"
