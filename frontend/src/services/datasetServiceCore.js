@@ -23,19 +23,13 @@ export function datasetDeletionFeedback(outcome) {
   };
 }
 
-export async function confirmAndDeleteDataset({
+export async function deleteDatasetAndRefresh({
   dataset,
   selectedDatasetId,
-  confirm,
   deleteDataset,
   refresh,
   onDeleting,
 }) {
-  const confirmed = confirm(
-    `Delete dataset “${dataset.dataset_name}”? Its saved learner records, feature snapshots, predictions, explanations, and recommendations will be permanently removed together.`,
-  );
-  if (!confirmed) return { status: "cancelled" };
-
   onDeleting?.();
   await deleteDataset(dataset.id);
   try {

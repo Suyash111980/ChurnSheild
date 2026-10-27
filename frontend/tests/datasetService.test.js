@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { confirmAndDeleteDataset, createDatasetService, datasetDeletionFeedback, submitDatasetRevision } from "../src/services/datasetServiceCore.js";
+import { deleteDatasetAndRefresh, createDatasetService, datasetDeletionFeedback, submitDatasetRevision } from "../src/services/datasetServiceCore.js";
 
 describe("dataset API contract", () => {
   it("uses the registered preview, upload, list, and detail routes", async () => {
@@ -27,38 +27,23 @@ describe("dataset API contract", () => {
     assert.equal(calls[4][1].method, "DELETE");
   });
 
-  it("requires confirmation before deleting and refreshes the selected dataset list", async () => {
+  it("deletes the confirmed dataset and refreshes the selected dataset list", async () => {
     const calls = [];
-    const dataset = { id: "d-1", dataset_name: "Spring cohort" };
-    const cancelled = await confirmAndDeleteDataset({
-      dataset,
+    const deleted = await deleteDatasetAndRefresh({
+      dataset: { id: "d-1", dataset_name: "Spring cohort" },
       selectedDatasetId: "d-1",
-      confirm: (message) => { calls.push(["confirm", message]); return false; },
-      deleteDataset: async () => calls.push(["delete"]),
-      refresh: async () => calls.push(["refresh"]),
-    });
-    assert.equal(cancelled.status, "cancelled");
-    assert.match(calls[0][1], /permanently removed together/);
-    assert.deepEqual(calls.map(([name]) => name), ["confirm"]);
-
-    const confirmedCalls = [];
-    const deleted = await confirmAndDeleteDataset({
-      dataset,
-      selectedDatasetId: "d-1",
-      confirm: () => true,
-      deleteDataset: async (id) => confirmedCalls.push(["delete", id]),
-      refresh: async (preferredId) => confirmedCalls.push(["refresh", preferredId]),
+      deleteDataset: async (id) => calls.push(["delete", id]),
+      refresh: async (preferredId) => calls.push(["refresh", preferredId]),
     });
     assert.equal(deleted.status, "deleted");
-    assert.deepEqual(confirmedCalls, [["delete", "d-1"], ["refresh", undefined]]);
+    assert.deepEqual(calls, [["delete", "d-1"], ["refresh", undefined]]);
   });
 
   it("does not refresh or report deletion when the delete request fails", async () => {
     const calls = [];
-    await assert.rejects(confirmAndDeleteDataset({
+    await assert.rejects(deleteDatasetAndRefresh({
       dataset: { id: "d-2", dataset_name: "Winter cohort" },
       selectedDatasetId: "d-2",
-      confirm: () => true,
       deleteDataset: async () => { calls.push("delete"); throw new Error("RLS denied"); },
       refresh: async () => calls.push("refresh"),
     }), /RLS denied/);
@@ -67,10 +52,9 @@ describe("dataset API contract", () => {
 
   it("shows the exact success notification only after deletion, including refresh failure", async () => {
     const outcomes = [];
-    const normal = await confirmAndDeleteDataset({
+    const normal = await deleteDatasetAndRefresh({
       dataset: { id: "d-4", dataset_name: "Cohort" },
       selectedDatasetId: "d-4",
-      confirm: () => true,
       deleteDataset: async () => { outcomes.push("delete succeeded"); },
       refresh: async () => { outcomes.push("refresh succeeded"); },
     });
@@ -92,10 +76,9 @@ describe("dataset API contract", () => {
   });
 
   it("distinguishes a successful deletion from a failed list refresh", async () => {
-    const result = await confirmAndDeleteDataset({
+    const result = await deleteDatasetAndRefresh({
       dataset: { id: "d-3", dataset_name: "Autumn cohort" },
       selectedDatasetId: "d-other",
-      confirm: () => true,
       deleteDataset: async () => {},
       refresh: async (preferredId) => {
         assert.equal(preferredId, "d-other");

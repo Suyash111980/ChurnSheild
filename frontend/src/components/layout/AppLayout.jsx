@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
@@ -25,21 +25,18 @@ export default function AppLayout() {
 
   const reportReady = useCallback((readyPath, generation) => {
     setTransition((current) => current.pathname === readyPath && current.generation === generation && current.phase === "loading"
-      ? { ...current, phase: "leaving" }
+      ? { ...current, phase: "hidden" }
       : current);
   }, []);
 
-  useEffect(() => {
-    if (transition.phase !== "leaving") return undefined;
-    const timer = window.setTimeout(() => {
-      setTransition((current) => current.generation === transition.generation && current.phase === "leaving"
-        ? { ...current, phase: "hidden" }
-        : current);
-    }, 200);
-    return () => window.clearTimeout(timer);
-  }, [transition.phase, transition.generation]);
+  const beginDataTransition = useCallback(() => {
+    generationRef.current += 1;
+    setTransition({ pathname, generation: generationRef.current, phase: "loading" });
+  }, [pathname]);
 
-  const contextValue = { generation: transition.generation, reportReady };
+
+
+  const contextValue = { generation: transition.generation, reportReady, beginDataTransition };
 
   return (
     <NavigationTransitionProvider value={contextValue}>
@@ -48,7 +45,7 @@ export default function AppLayout() {
         <div className="main-column">
           <Topbar onMenu={() => setOpen(true)} />
           <main className="page-content">
-            <div className={`page-transition-content${transition.phase === "loading" ? " is-pending" : ""}${transition.phase === "leaving" ? " is-revealing" : ""}`} inert={transition.phase === "loading"} aria-hidden={transition.phase === "loading"}>
+            <div className={`page-transition-content${transition.phase === "loading" ? " is-pending" : ""}`} inert={transition.phase === "loading"} aria-hidden={transition.phase === "loading"}>
               {accountProfile?.app_role === "master_admin" ? page : <DatasetProvider>{page}</DatasetProvider>}
             </div>
             <PageTransitionLoader state={transition.phase} />
