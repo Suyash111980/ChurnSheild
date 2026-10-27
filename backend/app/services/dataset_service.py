@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 import hashlib
 import logging
 import math
+import re
+import traceback
 from numbers import Real
 from pathlib import Path
 from typing import Any
@@ -588,10 +590,12 @@ def _record_failure(
     workspace_id: str,
     report: dict,
     summary: str,
+    *,
+    processing_progress: int = 0,
 ) -> dict:
     updates = {
         "status": "failed",
-        "processing_progress": 0,
+        "processing_progress": processing_progress,
         "error_summary": summary,
         "validation_results": report,
         "updated_at": _utc_now(),
@@ -605,6 +609,99 @@ def _record_failure(
         raise RuntimeError("database_unavailable")
 
     return record
+
+
+def _log_processing_event(dataset_id: str, stage: str, event: str, **fields) -> None:
+    """Emit bounded, structured processing metadata without learner data."""
+    details = " ".join(
+        f"{key}={value}"
+        for key, value in fields.items()
+        if isinstance(value, (str, int, float, bool)) and value is not None
+    )
+    logger.info(
+        "dataset_processing dataset_id=%s stage=%s event=%s%s",
+        dataset_id,
+        stage,
+        event,
+        f" {details}" if details else "",
+    )
+
+
+def _safe_error_code(exc: Exception) -> str:
+    code = getattr(exc, "code", None)
+    if isinstance(code, int) and not isinstance(code, bool):
+        code = str(code)
+    if isinstance(code, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,32}", code):
+        return code
+    return "unavailable"
+
+
+def _log_processing_exception(dataset_id: str, stage: str, exc: Exception) -> None:
+    # Log the traceback frames and safe exception metadata, but not the raw
+    # provider exception message (which can contain request or row details).
+    stack = "".join(traceback.format_tb(exc.__traceback__))
+    logger.error(
+        "dataset_processing dataset_id=%s stage=%s event=failed "
+        "exception_type=%s provider_code=%s traceback_frames=%s",
+        dataset_id,
+        stage,
+        type(exc).__name__,
+        _safe_error_code(exc),
+        stack.rstrip(),
+    )
+
+
+def _processing_failure_summary(stage: str, exc: Exception) -> tuple[str, str, str]:
+    """Map internal failures to safe, actionable user-facing diagnostics."""
+    if isinstance(exc, ModelArtifactError):
+        return (
+            "model_unavailable",
+            "The approved model could not be loaded. No predictions were saved; verify the deployed model artifact and retry.",
+            "Model prediction could not run because the approved model artifact is unavailable.",
+        )
+    if isinstance(exc, ModelFeatureError):
+        return (
+            "model_feature_contract_failed",
+            "The model could not process this dataset's features. No predictions were saved; verify the approved model and feature schema.",
+            "Model prediction could not run because the feature contract was not satisfied.",
+        )
+    messages = {
+        "learner_persistence": (
+            "learner_persistence_failed",
+            "Learner records could not be saved. Retry processing.",
+            "Learner records were not fully saved, so prediction processing did not complete.",
+        ),
+        "feature_persistence": (
+            "feature_persistence_failed",
+            "Feature snapshots could not be saved. No predictions were confirmed; retry processing.",
+            "Feature snapshot persistence failed before inference began.",
+        ),
+        "preprocessing_and_inference": (
+            "prediction_inference_failed",
+            "Model prediction could not be completed. Verify the approved model and feature contract, then retry.",
+            "Prediction generation failed; no prediction result was confirmed.",
+        ),
+        "prediction_persistence": (
+            "prediction_persistence_failed",
+            "Predictions could not be saved and verified. Retry processing.",
+            "Prediction persistence did not complete and verify successfully.",
+        ),
+        "explanation_and_recommendation_generation": (
+            "evidence_processing_failed",
+            "Saved predictions could not be fully finalized with their supporting evidence. Contact support before retrying.",
+            "Prediction evidence finalization failed after inference.",
+        ),
+        "dataset_finalization": (
+            "dataset_finalization_failed",
+            "Processing results could not be finalized. Refresh the dataset status or contact support.",
+            "The processing result could not be finalized.",
+        ),
+    }
+    return messages.get(stage, (
+        "dataset_processing_failed",
+        "Dataset processing could not be completed. Retry processing or contact support.",
+        "Dataset processing failed before a successful result was confirmed.",
+    ))
 
 
 def _update_dataset(
@@ -677,6 +774,8 @@ def _process_parsed_dataset(
     report["predictions_persisted"] = 0
     report["processing_state"] = "processing"
     processing_stage = "learner_persistence"
+    processing_progress = 5
+    _log_processing_event(dataset_id, processing_stage, "started", rows=len(records))
     try:
         chunks = [
             records[index:index + BATCH_SIZE]
@@ -684,6 +783,10 @@ def _process_parsed_dataset(
         ]
 
         for batch_index, batch in enumerate(chunks):
+            _log_processing_event(
+                dataset_id, processing_stage, "batch_started",
+                batch=batch_index + 1, batches=len(chunks), rows=len(batch),
+            )
             upserted = dataset_repository.upsert_learners([
                 _learner_payload(row, dataset_id)
                 for row in batch
@@ -703,6 +806,7 @@ def _process_parsed_dataset(
             progress = 10 + int(
                 55 * (batch_index + 1) / max(len(chunks), 1)
             )
+            processing_progress = progress
 
             _update_dataset(
                 dataset_id,
@@ -713,14 +817,24 @@ def _process_parsed_dataset(
                     "updated_at": _utc_now(),
                 },
             )
+            _log_processing_event(
+                dataset_id, processing_stage, "batch_completed",
+                batch=batch_index + 1, batches=len(chunks),
+                rows=len(key_to_learner), progress=progress,
+            )
 
         if len(key_to_learner) != len(records):
             raise RuntimeError("learner_mapping_incomplete")
+        _log_processing_event(
+            dataset_id, processing_stage, "completed", rows=len(key_to_learner),
+        )
 
         processing_stage = "feature_persistence"
+        _log_processing_event(dataset_id, processing_stage, "started", rows=len(records))
         as_of_date = datetime.now(timezone.utc).date().isoformat()
+        feature_batches = max(1, (len(records) + BATCH_SIZE - 1) // BATCH_SIZE)
 
-        for batch_index in range(0, len(records), BATCH_SIZE):
+        for batch_number, batch_index in enumerate(range(0, len(records), BATCH_SIZE), start=1):
             feature_rows = []
 
             for row in records[batch_index:batch_index + BATCH_SIZE]:
@@ -729,7 +843,24 @@ def _process_parsed_dataset(
                     _feature_payload(row, learner_id, as_of_date)
                 )
 
+            _log_processing_event(
+                dataset_id, processing_stage, "batch_started",
+                batch=batch_number, batches=feature_batches, rows=len(feature_rows),
+            )
             dataset_repository.upsert_features(feature_rows)
+            processing_progress = 65 + int(15 * batch_number / feature_batches)
+            _update_dataset(
+                dataset_id,
+                owner_id,
+                workspace_id,
+                {"processing_progress": processing_progress, "updated_at": _utc_now()},
+            )
+            _log_processing_event(
+                dataset_id, processing_stage, "batch_completed",
+                batch=batch_number, batches=feature_batches,
+                rows=len(feature_rows), progress=processing_progress,
+            )
+        _log_processing_event(dataset_id, processing_stage, "completed", rows=len(records))
 
         prediction_state = "dataset_incompatible"
         prediction_count = 0
@@ -745,83 +876,60 @@ def _process_parsed_dataset(
             prediction_state = "running"
             report["prediction_state"] = prediction_state
             processing_stage = "preprocessing_and_inference"
-            try:
-                feature_records = [
-                    {
-                        column: _safe_value(row.get(column))
-                        for column in FEATURE_COLUMNS
-                    }
-                    for row in records
-                ]
-                ordered_ids = [key_to_learner[_source_key(row)] for row in records]
-                inference_results = predict_records(feature_records, record_ids=ordered_ids)
-            except ModelArtifactError as exc:
-                # A missing artifact is a declared unavailable inference state;
-                # learner and feature processing can still complete descriptively.
-                prediction_state = "unavailable"
-                report["processing_state"] = "prediction_unavailable"
-                report["prediction_error_code"] = "model_unavailable"
-                report["prediction_message"] = (
-                    "Learners were saved, but predictions could not run because the approved model is unavailable. "
-                    "Check the configured model artifact and approved model version."
-                )
-                logger.warning("Dataset inference unavailable (reason=%s)", type(exc).__name__)
-            except ModelFeatureError as exc:
-                prediction_state = "unavailable"
-                report["processing_state"] = "prediction_unavailable"
-                report["prediction_error_code"] = "model_preprocessing_or_feature_contract_failed"
-                report["prediction_message"] = (
-                    "Learners were saved, but the model could not prepare these features for inference. "
-                    "Review the validation details and confirm that the approved artifact matches this feature schema."
-                )
-                logger.warning("Dataset inference rejected by feature contract (reason=%s)", type(exc).__name__)
-            else:
-                processing_stage = "prediction_persistence"
-                prediction_rows = [
-                    {
-                        "learner_id": prediction["record_id"],
-                        "model_version": prediction["model_version"],
-                        "risk_probability": prediction["risk_probability"],
-                        "risk_category": prediction["risk_category"],
-                        "created_at": prediction["predicted_at"],
-                    }
-                    for prediction in inference_results
-                ]
-
-                saved_predictions = dataset_repository.upsert_predictions(
-                    prediction_rows
-                )
-
-                expected_keys = {
-                    (
-                        str(row["learner_id"]),
-                        str(row["model_version"]),
-                    )
-                    for row in prediction_rows
+            _log_processing_event(dataset_id, processing_stage, "started", rows=len(records))
+            feature_records = [
+                {
+                    column: _safe_value(row.get(column))
+                    for column in FEATURE_COLUMNS
                 }
+                for row in records
+            ]
+            ordered_ids = [key_to_learner[_source_key(row)] for row in records]
+            inference_results = predict_records(feature_records, record_ids=ordered_ids)
+            if len(inference_results) != len(records):
+                raise RuntimeError("prediction_result_count_mismatch")
+            _log_processing_event(
+                dataset_id, processing_stage, "completed", predictions=len(inference_results),
+            )
 
-                saved_keys = {
-                    (
-                        str(row.get("learner_id")),
-                        str(row.get("model_version")),
-                    )
-                    for row in saved_predictions
-                    if (
-                        row.get("id")
-                        and row.get("learner_id")
-                        and row.get("model_version")
-                    )
+            processing_stage = "prediction_persistence"
+            _log_processing_event(dataset_id, processing_stage, "started", rows=len(inference_results))
+            prediction_rows = [
+                {
+                    "learner_id": prediction["record_id"],
+                    "model_version": prediction["model_version"],
+                    "risk_probability": prediction["risk_probability"],
+                    "risk_category": prediction["risk_category"],
+                    "created_at": prediction["predicted_at"],
                 }
+                for prediction in inference_results
+            ]
 
-                if (
-                    len(saved_predictions) != len(prediction_rows)
-                    or saved_keys != expected_keys
-                ):
-                    raise RuntimeError("prediction_rows_not_returned")
+            saved_predictions = dataset_repository.upsert_predictions(prediction_rows)
 
-                prediction_count = len(saved_predictions)
-                prediction_state = "available"
-                report["processing_state"] = "predictions_completed"
+            expected_keys = {
+                (str(row["learner_id"]), str(row["model_version"]))
+                for row in prediction_rows
+            }
+            saved_keys = {
+                (str(row.get("learner_id")), str(row.get("model_version")))
+                for row in saved_predictions
+                if row.get("id") and row.get("learner_id") and row.get("model_version")
+            }
+            if len(saved_predictions) != len(prediction_rows) or saved_keys != expected_keys:
+                raise RuntimeError("prediction_rows_not_returned")
+
+            prediction_count = len(saved_predictions)
+            prediction_state = "available"
+            report["processing_state"] = "predictions_completed"
+            processing_progress = max(processing_progress, 85)
+            _update_dataset(
+                dataset_id, owner_id, workspace_id,
+                {"processing_progress": processing_progress, "updated_at": _utc_now()},
+            )
+            _log_processing_event(
+                dataset_id, processing_stage, "completed", predictions=prediction_count,
+            )
         elif report["prediction_compatible"]:
             prediction_state = "row_limit_exceeded"
             report["processing_state"] = "row_limit_exceeded"
@@ -847,6 +955,7 @@ def _process_parsed_dataset(
                 "rows_with_recoverable_missing_values", 0
             )
             processing_stage = "explanation_and_recommendation_generation"
+            _log_processing_event(dataset_id, processing_stage, "started", predictions=prediction_count)
             evidence = _persist_prediction_evidence(
                 dataset_id=dataset_id,
                 feature_records=feature_records,
@@ -856,6 +965,18 @@ def _process_parsed_dataset(
                     for item in inference_results
                 ],
                 saved_predictions=saved_predictions,
+            )
+            processing_progress = 95
+            _update_dataset(
+                dataset_id, owner_id, workspace_id,
+                {"processing_progress": processing_progress, "updated_at": _utc_now()},
+            )
+            _log_processing_event(
+                dataset_id,
+                processing_stage,
+                "completed",
+                explanations=evidence.get("explanations_persisted", 0),
+                recommendations=evidence.get("recommendations_persisted", 0),
             )
         else:
             evidence = {
@@ -871,6 +992,8 @@ def _process_parsed_dataset(
             or evidence.get("recommendations_state") in {"partial", "unavailable"}
         ):
             report["processing_state"] = "predictions_completed_with_evidence_issues"
+        processing_stage = "dataset_finalization"
+        _log_processing_event(dataset_id, processing_stage, "started", rows=len(records))
         record = dataset_repository.update_owned_dataset(
             dataset_id,
             owner_id,
@@ -889,6 +1012,11 @@ def _process_parsed_dataset(
         if record is None:
             raise RuntimeError("dataset_update_missing")
 
+        _log_processing_event(
+            dataset_id, processing_stage, "completed",
+            prediction_state=report.get("prediction_state"),
+            predictions=report.get("predictions_persisted", 0),
+        )
         logger.info(
             "Dataset processing completed "
             "(prediction_state=%s, predictions_persisted=%d, "
@@ -904,24 +1032,17 @@ def _process_parsed_dataset(
         return {"data": record, "validation": report}
 
     except Exception as exc:
-        logger.exception(
-            "Dataset processing failed (exception_type=%s)",
-            type(exc).__name__,
-        )
-
+        _log_processing_exception(dataset_id, processing_stage, exc)
         report["processing_state"] = "failed"
         report["failed_stage"] = processing_stage
-        if report.get("prediction_state") == "running":
+        error_code, safe_summary, prediction_message = _processing_failure_summary(processing_stage, exc)
+        if report.get("prediction_state") == "running" or processing_stage in {
+            "feature_persistence", "preprocessing_and_inference", "prediction_persistence"
+        }:
             report["prediction_state"] = "failed"
-            report["prediction_error_code"] = (
-                "prediction_persistence_failed"
-                if processing_stage == "prediction_persistence"
-                else "prediction_inference_failed"
-            )
-            report["prediction_error"] = (
-                "Inference or prediction persistence did not complete; no result was confirmed. "
-                "Review the reported failure stage and retry processing."
-            )
+            report["prediction_error_code"] = error_code
+            report["prediction_message"] = prediction_message
+            report["prediction_error"] = prediction_message
 
         try:
             record = _record_failure(
@@ -929,16 +1050,13 @@ def _process_parsed_dataset(
                 owner_id,
                 workspace_id,
                 report,
-                "Dataset processing failed. Retry the upload to continue.",
+                safe_summary,
+                processing_progress=processing_progress,
             )
             return {"data": record, "validation": report}
 
         except Exception as failure_exc:
-            logger.exception(
-                "Failed to record dataset processing failure "
-                "(exception_type=%s)",
-                type(failure_exc).__name__,
-            )
+            _log_processing_exception(dataset_id, "failure_recording", failure_exc)
             raise RuntimeError("database_unavailable") from exc
 
 

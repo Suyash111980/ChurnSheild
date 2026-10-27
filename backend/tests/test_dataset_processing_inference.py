@@ -99,7 +99,7 @@ def configure_mock_processing(monkeypatch, *, predictions=None):
         "update_owned_dataset",
         lambda dataset_id, owner_id, workspace_id, changes: (
             updates.append((dataset_id, owner_id, workspace_id, changes))
-            or {"id": dataset_id, "status": changes.get("status", "processing")}
+            or {"id": dataset_id, "status": changes.get("status", "processing"), **changes}
         ),
     )
     if predictions is not None:
@@ -160,7 +160,7 @@ def test_prepared_dataset_runs_approved_inference_and_persists_idempotently(monk
     )
 
 
-def test_approval_gate_failure_reports_unavailable_and_writes_no_prediction(monkeypatch):
+def test_model_loading_failure_marks_dataset_failed_and_writes_no_prediction(monkeypatch):
     parsed = parse_dataset("prepared.csv", prepared_csv())
     store = PredictionTable()
     monkeypatch.setattr(dataset_repository, "supabase", store)
@@ -178,13 +178,72 @@ def test_approval_gate_failure_reports_unavailable_and_writes_no_prediction(monk
         initial_record={"id": DATASET_ID},
     )
 
-    assert result["data"]["status"] == "processed"
-    assert result["validation"]["prediction_state"] == "unavailable"
-    assert result["validation"]["processing_state"] == "prediction_unavailable"
+    assert result["data"]["status"] == "failed"
+    assert result["data"]["error_summary"]
+    assert result["validation"]["prediction_state"] == "failed"
+    assert result["validation"]["processing_state"] == "failed"
+    assert result["validation"]["failed_stage"] == "preprocessing_and_inference"
     assert result["validation"]["prediction_error_code"] == "model_unavailable"
     assert result["validation"]["prediction_message"]
     assert result["validation"]["predictions_persisted"] == 0
     assert store.rows == {}
+
+
+def test_feature_persistence_failure_marks_dataset_failed_at_last_confirmed_progress(monkeypatch):
+    parsed = parse_dataset("prepared.csv", prepared_csv())
+    updates = []
+    configure_mock_processing(monkeypatch)
+    monkeypatch.setattr(
+        dataset_repository, "upsert_features",
+        lambda _rows: (_ for _ in ()).throw(RuntimeError("provider details remain private")),
+    )
+    monkeypatch.setattr(
+        dataset_repository, "update_owned_dataset",
+        lambda dataset_id, _owner, _workspace, changes: (
+            updates.append(changes.copy())
+            or {"id": dataset_id, "status": changes.get("status", "processing"), **changes}
+        ),
+    )
+    result = dataset_service._process_parsed_dataset(
+        dataset_id=DATASET_ID, owner_id=OWNER_ID, workspace_id=WORKSPACE_ID,
+        parsed=parsed, initial_record={"id": DATASET_ID},
+    )
+
+    assert result["data"]["status"] == "failed"
+    assert result["data"]["processing_progress"] == 65
+    assert "provider details remain private" not in result["data"]["error_summary"]
+    assert result["validation"]["failed_stage"] == "feature_persistence"
+    assert result["validation"]["prediction_state"] == "failed"
+    assert result["validation"]["prediction_error_code"] == "feature_persistence_failed"
+
+
+def test_prediction_persistence_failure_marks_dataset_failed_and_saves_no_success(monkeypatch):
+    parsed = parse_dataset("prepared.csv", prepared_csv())
+    configure_mock_processing(monkeypatch)
+    monkeypatch.setattr(
+        dataset_repository, "upsert_predictions",
+        lambda _rows: (_ for _ in ()).throw(RuntimeError("provider row values must not leak")),
+    )
+    monkeypatch.setattr(
+        dataset_service, "predict_records",
+        lambda _rows, *, record_ids: [{
+            "record_id": record_ids[0], "model_version": "approved-test-v1",
+            "risk_probability": 0.7, "risk_category": "high",
+            "predicted_at": "2026-10-17T00:00:00+00:00",
+        }],
+    )
+
+    result = dataset_service._process_parsed_dataset(
+        dataset_id=DATASET_ID, owner_id=OWNER_ID, workspace_id=WORKSPACE_ID,
+        parsed=parsed, initial_record={"id": DATASET_ID},
+    )
+
+    assert result["data"]["status"] == "failed"
+    assert result["validation"]["failed_stage"] == "prediction_persistence"
+    assert result["validation"]["prediction_state"] == "failed"
+    assert result["validation"]["prediction_error_code"] == "prediction_persistence_failed"
+    assert result["validation"]["predictions_persisted"] == 0
+    assert "provider row values must not leak" not in result["data"]["error_summary"]
 
 
 def test_inference_runtime_failure_is_reported_as_failed_not_not_started(monkeypatch):
@@ -209,7 +268,7 @@ def test_inference_runtime_failure_is_reported_as_failed_not_not_started(monkeyp
     assert result["validation"]["processing_state"] == "failed"
     assert result["validation"]["prediction_state"] == "failed"
     assert result["validation"]["failed_stage"] == "preprocessing_and_inference"
-    assert "did not complete" in result["validation"]["prediction_error"]
+    assert "generation failed" in result["validation"]["prediction_error"]
     assert result["validation"]["predictions_persisted"] == 0
     assert store.rows == {}
 

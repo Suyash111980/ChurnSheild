@@ -1,8 +1,10 @@
 """Owner-scoped dataset preview, upload, processing, list, detail, and retry APIs."""
 
+from functools import partial
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
+from starlette.concurrency import run_in_threadpool
 from fastapi.security import HTTPAuthorizationCredentials
 
 from app.api.dependencies.auth import bearer_scheme
@@ -54,13 +56,17 @@ async def upload_dataset(
     _ensure_database()
     content = await _upload_bytes(file)
     try:
-        return dataset_service.upload_dataset(
+        # The processor performs synchronous database and model work. Keep it
+        # off the ASGI event loop so status polling and other requests remain
+        # responsive while this request awaits completion.
+        return await run_in_threadpool(partial(
+            dataset_service.upload_dataset,
             owner_id=user["id"],
             workspace_id=user["workspace_id"],
             filename=file.filename or "dataset.csv",
             dataset_name=dataset_name,
             content=content,
-        )
+        ))
     except ValueError as exc:
         raise HTTPException(status_code=409, detail="Dataset cannot be retried in its current state.") from exc
     except Exception as exc:
