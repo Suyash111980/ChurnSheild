@@ -69,3 +69,7 @@ data/
 .vscode/
 .DS_Store
 Thumbs.db
+# Runtime model bundle required by the backend (keep training data and snapshots ignored)
+!ml/artifacts/churn_model.joblib
+!ml/artifacts/churn_model.metadata.json
+!ml/artifacts/churn_model.evaluation.json

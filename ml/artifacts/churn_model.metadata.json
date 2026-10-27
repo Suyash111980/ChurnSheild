@@ -1,0 +1,109 @@
+{
+  "analysis_unit": "learner-course-presentation row",
+  "excluded_columns": [
+    "id_student",
+    "target_withdrawn",
+    "final_result",
+    "date_unregistration",
+    "student_name",
+    "gender",
+    "region",
+    "highest_education",
+    "imd_band",
+    "age_band",
+    "disability"
+  ],
+  "feature_columns": [
+    "code_module",
+    "code_presentation",
+    "num_of_prev_attempts",
+    "studied_credits",
+    "module_presentation_length",
+    "registration_record_present",
+    "registration_by_cutoff",
+    "registration_day_at_cutoff",
+    "registration_date_missing",
+    "assessments_due_by_cutoff",
+    "assessment_submissions_by_cutoff",
+    "assessment_late_submissions_by_cutoff",
+    "assessments_without_submission_recorded_by_cutoff",
+    "assessment_banked_results_by_cutoff",
+    "assessment_submission_rate_by_cutoff",
+    "vle_total_clicks_by_cutoff",
+    "vle_active_days_by_cutoff",
+    "vle_distinct_resources_by_cutoff",
+    "vle_clicks_day_0_7",
+    "vle_clicks_day_8_cutoff",
+    "vle_has_activity_by_cutoff",
+    "vle_days_since_last_activity_at_cutoff"
+  ],
+  "feature_cutoff_day": 30,
+  "feature_cutoff_day_status": "provisional per Phase 2 preparation proposal",
+  "group_key": "id_student",
+  "limitations": [
+    "Day-30 cutoff and binary target follow the documented Phase 2 proposal.",
+    "Sampled prepared cohort is not a population-representative test set.",
+    "Random grouped holdout does not establish temporal or external generalization.",
+    "Sensitive and demographic attributes are excluded pending fairness review.",
+    "Risk bands are provisional and must not drive high-impact decisions alone."
+  ],
+  "model_configuration": {
+    "class_weight": "balanced_subsample",
+    "estimator": "RandomForestClassifier",
+    "max_features": "sqrt",
+    "min_samples_leaf": 2,
+    "n_estimators": 300,
+    "random_seed": 42
+  },
+  "model_version": "churnshield-oulad-rf-1.0.0",
+  "operational_decision_threshold": 0.5,
+  "operational_threshold_status": "baseline default; requires validation and approval",
+  "positive_class": "Withdrawn",
+  "prepared_cohort": {
+    "class_counts": {
+      "0": 4627,
+      "1": 2149
+    },
+    "rows": 6776,
+    "source_artifact_type": "prepared development sample; not population representative",
+    "unique_learners": 6000
+  },
+  "preprocessing": {
+    "categorical": "most-frequent imputation and one-hot encoding; unknowns ignored",
+    "fit_scope": "training learners only",
+    "numeric": "median imputation with missing indicators"
+  },
+  "probability_calibration_status": "uncalibrated RandomForest predict_proba scores; not calibrated risk probabilities",
+  "risk_bands": {
+    "high_min_inclusive": 0.7,
+    "low_max_exclusive": 0.3,
+    "status": "provisional; requires operational review before deployment"
+  },
+  "risk_bands_status": "provisional; requires operational review before deployment",
+  "schema_version": "oulad-learner-v1",
+  "split": {
+    "approximate_proportions": {
+      "test": 0.2,
+      "train": 0.6,
+      "validation": 0.2
+    },
+    "learner_groups": {
+      "test": 1200,
+      "train": 3600,
+      "validation": 1200
+    },
+    "method": "GroupShuffleSplit by id_student",
+    "row_counts": {
+      "test": 1363,
+      "train": 4057,
+      "validation": 1356
+    }
+  },
+  "target": "target_withdrawn",
+  "target_mapping": {
+    "Distinction": 0,
+    "Fail": 0,
+    "Pass": 0,
+    "Withdrawn": 1
+  }
+}
