@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import AppLayout from "./components/layout/AppLayout";
 import Analytics from "./pages/Analytics";
 import Dashboard from "./pages/Dashboard";
+import DataWorkspace from "./pages/DataWorkspace";
 import Learners from "./pages/Learners";
 import LearnerProfile from "./pages/LearnerProfile";
 import Login from "./pages/Login";
@@ -133,6 +134,7 @@ export default function App() {
           <Route path="/root-cause" element={<RootCause />} />
           <Route path="/recommendations" element={<Recommendations />} />
           <Route path="/course-insights" element={<CourseInsights />} />
+          <Route path="/data-workspace" element={<DataWorkspace />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/admin/users" element={<AdminApprovals />} />

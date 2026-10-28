@@ -10,6 +10,7 @@ import LoadingState from "../components/common/LoadingState";
 import ErrorState from "../components/common/ErrorState";
 import EmptyState from "../components/common/EmptyState";
 import { describeEarlyWarningEvidence, getEarlyWarningEvidenceItems, summarizeEarlyWarningEvidence } from "../utils/earlyWarningEvidence";
+import DatasetScopeSelect from "../components/common/DatasetScopeSelect";
 import { usePageTransitionReady } from "../context/NavigationTransitionContext";
 
 function Kpi({ Icon, tone, value, label, sub }) { return <article className="metric-card compact-kpi"><span className={`metric-icon ${tone}`}><Icon size={18}/></span><strong>{value}</strong><span>{label}</span>{sub && <small>{sub}</small>}</article>; }
@@ -61,6 +62,7 @@ export default function EarlyWarning() {
   const [request, setRequest] = useState({ datasetId: null, result: null, error: null, loading: false });
   const [summaryRequest, setSummaryRequest] = useState({ datasetId: null, result: null, error: null, loading: false });
   const [reload, setReload] = useState(0);
+  const [pendingScope, setPendingScope] = useState(null);
   const [query, setQuery] = useState("");
   const [risk, setRisk] = useState("");
   const [offset, setOffset] = useState(0);
@@ -100,7 +102,12 @@ export default function EarlyWarning() {
   const summary = summaryIsCurrent ? summaryRequest.result : null;
   const metrics = earlyWarningSummary(summary);
   const summaryLoading = Boolean(datasetId) && (!summaryIsCurrent || summaryRequest.loading);
-  usePageTransitionReady(!datasetsLoading && !loading && !summaryLoading);
+  const scopeDataReady = !datasetsLoading && !loading && !summaryLoading;
+  usePageTransitionReady(scopeDataReady && (pendingScope === null || pendingScope === datasetId));
+
+  useEffect(() => {
+    if (scopeDataReady && pendingScope === datasetId) setPendingScope(null);
+  }, [scopeDataReady, pendingScope, datasetId]);
 
   function exportRows() {
     const headers = ["Learner ID", "Course", "Risk", "Probability", "Evidence"];
@@ -109,6 +116,8 @@ export default function EarlyWarning() {
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = "churnshield-early-warning.csv"; anchor.click(); URL.revokeObjectURL(url);
   }
   function selectScope(value) {
+    if (value === datasetId) return;
+    setPendingScope(value);
     setOffset(0);
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
@@ -119,7 +128,7 @@ export default function EarlyWarning() {
   }
 
   return <><PageHeader eyebrow="INTERVENTION WORKSPACE" title="Early Warning Center" subtitle="Prioritize outreach using persisted risk results and reviewable evidence."/>
-    <label className="learner-dataset-scope">Dataset scope<select aria-label="Early Warning dataset scope" value={overallScope ? "all" : datasetId} onChange={(event) => selectScope(event.target.value)}><option value="all">All Datasets / Overall Class</option>{datasets.map((item) => <option key={item.id} value={item.id}>{item.dataset_name} · {item.status}</option>)}</select></label>
+    <DatasetScopeSelect value={overallScope ? "all" : datasetId} datasets={datasets} onChange={(event) => selectScope(event.target.value)} loading={pendingScope !== null && !(scopeDataReady && pendingScope === datasetId)} ariaLabel="Early Warning dataset scope" />
     <div className="page-heading-actions"><button className="secondary-button" disabled={!rows.length} onClick={exportRows}><Download size={15}/> Export visible rows</button><Link className="primary-button" to="/recommendations">View recommendations <ArrowRight size={15}/></Link></div>
     {!datasetId && <EmptyState title="Select a dataset" message="Choose a processed dataset to review saved risk records and available evidence."/>}
     {loading && <LoadingState rows={4} label="Loading early warning records"/>}

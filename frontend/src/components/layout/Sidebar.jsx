@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import {
   BookOpen,
+  Database,
   FileText,
   GitBranch,
   LayoutDashboard,
@@ -22,6 +23,7 @@ const links = [
   ["Root Cause Analysis", "/root-cause", GitBranch],
   ["Recommendations", "/recommendations", Sparkles],
   ["Course Insights", "/course-insights", BookOpen],
+  ["Data Workspace", "/data-workspace", Database],
   ["Reports", "/reports", FileText],
 ];
 

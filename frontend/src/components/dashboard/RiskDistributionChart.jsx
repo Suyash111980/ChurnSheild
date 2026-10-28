@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const RISK_COLORS = { high: "#e7465b", medium: "#6948f5", low: "#11b7a2" };
+const RISK_COLORS = { high: "var(--card-accent-critical)", medium: "var(--card-brand-purple)", low: "var(--card-accent-teal)" };
 const RISK_LABELS = { high: "High Risk", medium: "Medium Risk", low: "Low Risk" };
 
 function describeArc(startAngle, sweepAngle, radius) {
