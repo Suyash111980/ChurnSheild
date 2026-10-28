@@ -1,6 +1,6 @@
 import { Activity, ArrowRight, Database, Download, ShieldAlert, UsersRound } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useDataset } from "../context/DatasetContext";
 import { useDashboard } from "../hooks/useDashboard";
@@ -10,6 +10,7 @@ import RiskDistributionChart from "../components/dashboard/RiskDistributionChart
 import { datasetListState } from "../utils/roleNavigation";
 import { getAvatarDetails } from "../utils/userAvatar";
 import { usePageTransitionReady } from "../context/NavigationTransitionContext";
+import DatasetScopeSelect from "../components/common/DatasetScopeSelect";
 import "./Dashboard.css";
 
 function Metric({ label, value, note, Icon, tone = "violet", to }) {
@@ -35,13 +36,24 @@ export default function Dashboard() {
   const { user, accountProfile } = useAuth();
   const { dataset, datasets, datasetId, selectDataset, loading: datasetsLoading, error: datasetsError, refresh } = useDataset();
   const [overallScope, setOverallScope] = useState(false);
+  const [pendingScope, setPendingScope] = useState(null);
   const activeDatasetId = overallScope ? "all" : datasetId;
   const { data, loading, error, retry } = useDashboard(activeDatasetId);
   const listState = datasetListState({ loading: datasetsLoading, error: datasetsError, datasets });
   const initialLoading = listState === "loading" || ((overallScope || dataset?.status === "processed") && loading);
-  usePageTransitionReady(!initialLoading);
+  const dashboardReady = !initialLoading;
+  usePageTransitionReady(dashboardReady && (pendingScope === null || pendingScope === activeDatasetId));
+  useEffect(() => {
+    if (dashboardReady && pendingScope === activeDatasetId) setPendingScope(null);
+  }, [dashboardReady, pendingScope, activeDatasetId]);
   const displayLabel = getAvatarDetails(user, accountProfile).label;
   const firstName = displayLabel === "User" ? "there" : displayLabel.split(" ")[0];
+  const selectScope = (value) => {
+    if (value === "all" ? overallScope : !overallScope && value === datasetId) return;
+    setPendingScope(value === "all" ? "all" : value);
+    if (value === "all") setOverallScope(true);
+    else { setOverallScope(false); selectDataset(value); }
+  };
 
   if (listState === "loading") return <><div className="page-heading dashboard-title"><div><div className="overline">CHURNSHIELD OVERVIEW</div><h1>Welcome, {firstName}</h1><p>Loading your workspace datasets…</p></div></div><LoadingState rows={3} label="Loading datasets" /></>;
   if (listState === "error") return <><div className="page-heading dashboard-title"><div><div className="overline">CHURNSHIELD OVERVIEW</div><h1>Welcome, {firstName}</h1><p>Workspace information is temporarily unavailable.</p></div></div><ErrorState title="Workspace data unavailable" message="We couldn’t retrieve this workspace’s dataset list. Retry, or contact support if the problem continues." onRetry={() => refresh().catch(() => {})} /></>;
@@ -53,9 +65,8 @@ export default function Dashboard() {
 
   return <>
     <div className="page-heading dashboard-title"><div><div className="overline">CHURNSHIELD OVERVIEW</div><h1>Welcome, {firstName}</h1><p>{overallScope ? "All Datasets / Overall Class · " : ""}Summary of persisted learner records and predictions.</p></div><div className="heading-actions">
-      <label className="dashboard-dataset-select"><span className="sr-only">Active dataset scope</span><select aria-label="Active dataset scope" value={overallScope ? "all" : datasetId} onChange={(event) => { if (event.target.value === "all") setOverallScope(true); else { setOverallScope(false); selectDataset(event.target.value); } }}><option value="all">All Datasets / Overall Class</option>{datasets.map((item) => <option key={item.id} value={item.id}>{item.dataset_name} · {item.status}</option>)}</select></label>
-      {accountProfile?.app_role === "admin" && <Link to="/reports" className="secondary-button"><Download size={15}/> Export overview</Link>}
-      <Link to="/early-warning" className="primary-button"><ShieldAlert size={15}/> Review high-risk</Link>
+      <DatasetScopeSelect className="dashboard-dataset-select" hiddenLabel label="Active dataset scope" ariaLabel="Active dataset scope" value={overallScope ? "all" : datasetId} datasets={datasets} onChange={(event) => selectScope(event.target.value)} loading={pendingScope !== null && !(dashboardReady && pendingScope === activeDatasetId)} />
+      {accountProfile?.app_role === "admin" && <Link to="/reports" className="primary-button dashboard-export-button"><Download size={15}/> Export overview</Link>}
     </div></div>
     {!overallScope && dataset?.status === "failed" && <ErrorState title="Dataset processing failed" message={dataset.error_summary || "Review the dataset validation results and retry processing."} onRetry={() => refresh().catch(() => {})} />}
     {!overallScope && dataset && dataset.status !== "processed" && dataset.status !== "failed" && <div className="illustrative-banner api-notice"><span className="banner-spark"><Activity size={16} /></span><span><strong>Processing in progress.</strong> Dashboard statistics will appear when this dataset is ready.</span></div>}

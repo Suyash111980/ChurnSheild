@@ -69,7 +69,7 @@ export default function CourseInsights() {
           <div className="weekly-unavailable" role="status"><span className="weekly-empty-icon" aria-hidden="true">↗</span><div><strong>Weekly activity data unavailable</strong><p>The current dataset stores learner-course features and predictions, but not dated VLE interaction events. No trend is inferred from summary features.</p></div></div>
         </article>
       </section>
-      <p className="data-footnote">Risk counts and mean risk use saved latest predictions. They are model estimates, not confirmed withdrawals.</p>
+      
     </>}
   </div>;
 }
