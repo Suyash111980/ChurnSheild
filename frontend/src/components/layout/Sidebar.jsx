@@ -41,7 +41,7 @@ export default function Sidebar({ open, onClose }) {
         </div>
 
         {isMasterAdmin ? (
-          <nav className="nav-list master-admin-nav">
+          <nav className="nav-list master-admin-nav" aria-label="Platform administration">
             <NavLink to="/admin/users" end onClick={onClose} className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}>
               <ShieldCheck size={18} /><span>Admin Requests</span>
             </NavLink>

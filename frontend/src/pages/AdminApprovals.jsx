@@ -83,6 +83,7 @@ export default function AdminApprovals() {
 
   useEffect(() => { loadRequests(); }, [loadRequests]);
 
+
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
@@ -156,19 +157,23 @@ export default function AdminApprovals() {
   return <>
   <section className="admin-requests-page">
     <header className="admin-requests-heading">
-      <div><p className="form-eyebrow">MASTER ADMIN</p><h1>Admin Requests</h1><p>Review access requests and keep a clear record of decisions.</p></div>
-      <button type="button" className="secondary-button" onClick={loadRequests} disabled={loading || working}><RefreshCw size={16}/> Refresh</button>
+      <div><p className="form-eyebrow">PLATFORM ADMINISTRATION</p><h1>Super Admin Dashboard</h1><p>Review admin access requests and track approval decisions.</p></div>
+      <button type="button" className="secondary-button" onClick={loadRequests} disabled={loading || working}><RefreshCw size={16}/> Refresh dashboard</button>
     </header>
+
+
 
     {notice && <div className="admin-notice success" role="status">{notice}</div>}
     {error && <div className="admin-notice error" role="alert">{error}{errorRetryable && <button type="button" className="text-button" onClick={loadRequests}>Retry</button>}</div>}
 
+    <section className="admin-request-summary-section" aria-labelledby="admin-request-summary-heading">
+    <div className="master-section-heading"><div><h2 id="admin-request-summary-heading">Admin approval requests</h2></div></div>
     <section className="admin-request-summary" aria-label="Admin request totals">
       {TABS.map(({ id, label, Icon }) => <article className={`admin-summary-card ${id}`} key={id}>
         <span className="admin-summary-icon"><Icon size={19}/></span><div><span>{label} Requests</span><strong aria-live="polite">{adminRequestCount(counts, id, { loading, error: Boolean(error) })}</strong></div>
       </article>)}
     </section>
-    <p className="admin-count-scope">Counts reflect matching requests across all statuses. Use search and request dates to narrow the totals.</p>
+    <p className="admin-count-scope">Counts reflect requests returned by the existing approval service.</p>
 
     <section className="admin-request-panel panel" aria-label="Admin request management">
       <div className="admin-request-toolbar">
@@ -195,6 +200,7 @@ export default function AdminApprovals() {
           <div className="admin-pagination"><span>Showing {firstResult}–{lastResult} of {page.count} {status} requests</span><div><button type="button" className="secondary-button" onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))} disabled={offset === 0 || loading}>Previous</button><button type="button" className="secondary-button" onClick={() => setOffset(offset + PAGE_SIZE)} disabled={!page.has_more || loading}>Next</button></div></div>
         </>}
       </div>
+    </section>
     </section>
 
     <section className="admin-activity panel">
