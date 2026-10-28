@@ -1,15 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { confirmAndDeleteDataset, datasetDeletionFeedback } from "../src/services/datasetServiceCore.js";
+import { deleteDatasetAndRefresh, datasetDeletionFeedback } from "../src/services/datasetServiceCore.js";
 
 describe("dataset deletion confirmation feedback", () => {
   it("does not announce success until the DELETE request resolves", async () => {
     let resolveDelete;
     let settled = false;
-    const deletion = confirmAndDeleteDataset({
+    const deletion = deleteDatasetAndRefresh({
       dataset: { id: "dataset-1", dataset_name: "Cohort" },
       selectedDatasetId: "dataset-1",
-      confirm: () => true,
       deleteDataset: () => new Promise((resolve) => { resolveDelete = resolve; }),
       refresh: async () => {},
     }).then((outcome) => { settled = true; return outcome; });

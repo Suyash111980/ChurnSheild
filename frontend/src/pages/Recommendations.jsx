@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Lightbulb, Sparkles } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import PageHeader from "../components/layout/PageHeader";
@@ -11,7 +11,7 @@ import EmptyState from "../components/common/EmptyState";
 import { getRecommendationQueueState, getRecommendationStatusCounts } from "../utils/recommendationPresentation";
 import { formatRecommendation } from "../utils/recommendationCopy";
 import { datasetScopeParams } from "../utils/datasetScope";
-import { usePageTransitionReady } from "../context/NavigationTransitionContext";
+import { useBeginDataTransition, usePageTransitionReady } from "../context/NavigationTransitionContext";
 
 const statusLabels = { pending: "Suggested", in_progress: "In progress", completed: "Completed", dismissed: "Dismissed" };
 const statusCards = [["pending", "Suggested", Lightbulb], ["in_progress", "In progress", Clock3], ["completed", "Completed", CheckCircle2], ["dismissed", "Dismissed", Sparkles]];
@@ -20,24 +20,35 @@ function riskName(value) { const normalized = String(value || "").toLowerCase();
 export default function Recommendations() {
   const { datasets, datasetId, loading: datasetsLoading } = useDataset();
   const { accountProfile } = useAuth();
+  const beginDataTransition = useBeginDataTransition();
   const [searchParams, setSearchParams] = useSearchParams();
   const learnerFilter = searchParams.get("learner_id") || "";
   const requestedDatasetId = searchParams.get("dataset_id");
   const effectiveDatasetId = searchParams.get("scope") === "all" ? "all" : requestedDatasetId || datasetId;
   const [request, setRequest] = useState({ datasetId: null, result: null, error: null, loading: false });
   const [reload, setReload] = useState(0);
+  const [pendingScope, setPendingScope] = useState(null);
+  const requestSequence = useRef(0);
   const [status, setStatus] = useState("");
   const [risk, setRisk] = useState("");
   const [workingId, setWorkingId] = useState(null);
   const [updateError, setUpdateError] = useState(null);
   const [offset, setOffset] = useState(0);
   const load = useCallback(() => {
+    const requestId = ++requestSequence.current;
     if (!effectiveDatasetId) { setRequest({ datasetId: null, result: null, error: null, loading: false }); return () => {}; }
     const controller = new AbortController();
     setRequest({ datasetId: effectiveDatasetId, result: null, error: null, loading: true });
     getRecommendations({ ...datasetScopeParams(effectiveDatasetId, { ...(learnerFilter ? { learner_id: learnerFilter } : {}), ...(status ? { status } : {}), ...(risk ? { risk_level: risk } : {}) }), limit: 20, offset }, { signal: controller.signal })
-      .then((result) => setRequest({ datasetId: effectiveDatasetId, result, error: null, loading: false }))
-      .catch((error) => { if (error.name !== "AbortError") setRequest({ datasetId: effectiveDatasetId, result: null, error, loading: false }); });
+      .then((result) => {
+        if (controller.signal.aborted || requestId !== requestSequence.current) return;
+        setRequest({ datasetId: effectiveDatasetId, result, error: null, loading: false });
+      })
+      .catch((error) => {
+        if (error.name !== "AbortError" && !controller.signal.aborted && requestId === requestSequence.current) {
+          setRequest({ datasetId: effectiveDatasetId, result: null, error, loading: false });
+        }
+      });
     return () => controller.abort();
   }, [effectiveDatasetId, learnerFilter, status, risk, offset]);
   useEffect(() => { setUpdateError(null); setOffset(0); }, [effectiveDatasetId, learnerFilter]);
@@ -51,7 +62,7 @@ export default function Recommendations() {
   const rows = allRows;
   const totals = useMemo(() => getRecommendationStatusCounts(result, allRows), [result, allRows]);
   const queueState = getRecommendationQueueState({ datasetId: effectiveDatasetId, loading, error, result });
-  usePageTransitionReady(!datasetsLoading && !loading);
+  usePageTransitionReady(!datasetsLoading && !loading && (pendingScope === null || pendingScope === effectiveDatasetId));
   const canUpdate = accountProfile?.app_role === "admin";
   async function update(item, nextStatus) {
     setWorkingId(item.id);
@@ -64,6 +75,9 @@ export default function Recommendations() {
     finally { setWorkingId(null); }
   }
   function selectDatasetScope(value) {
+    if (value === effectiveDatasetId) return;
+    setPendingScope(value);
+    beginDataTransition();
     setOffset(0);
     const next = new URLSearchParams(searchParams);
     if (value === "all") { next.set("scope", "all"); next.delete("dataset_id"); }

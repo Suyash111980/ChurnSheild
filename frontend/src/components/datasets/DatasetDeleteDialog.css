@@ -1,0 +1,108 @@
+.dataset-delete-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  overflow-y: auto;
+  background: rgb(11 17 32 / 58%);
+  backdrop-filter: blur(5px);
+  animation: dataset-delete-fade-in 160ms ease both;
+}
+.dataset-delete-dialog {
+  position: relative;
+  width: min(460px, 100%);
+  padding: 30px;
+  border: 1px solid var(--border-color, #e3e8f0);
+  border-radius: 16px;
+  background: var(--surface, #fff);
+  color: var(--text-primary, #172033);
+  box-shadow: 0 24px 72px rgb(8 15 31 / 24%);
+  animation: dataset-delete-dialog-in 190ms cubic-bezier(.2, .7, .2, 1) both;
+}
+.dataset-delete-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary, #8490a3);
+}
+.dataset-delete-close:hover:not(:disabled) { background: rgb(105 72 245 / 9%); color: var(--purple, #6948f5); }
+.dataset-delete-close:disabled { cursor: wait; opacity: .6; }
+.dataset-delete-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 18px;
+  border: 1px solid #ded5ff;
+  border-radius: 14px;
+  background: #f0edff;
+  color: var(--purple, #6948f5);
+}
+.dataset-delete-dialog h2 {
+  margin: 0 36px 9px 0;
+  color: var(--text-primary, #172033);
+  font-size: 21px;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -.35px;
+}
+.dataset-delete-intro { margin: 0 0 7px; color: var(--text-secondary, #8490a3); font-size: 14px; line-height: 1.5; }
+.dataset-delete-name {
+  overflow: hidden;
+  margin-bottom: 13px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color, #e3e8f0);
+  border-radius: 8px;
+  background: var(--surface-soft, #fafbfc);
+  color: var(--text-primary, #172033);
+  font-size: 14px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dataset-delete-warning { margin: 0; color: var(--text-secondary, #8490a3); font-size: 13px; line-height: 1.65; }
+.dataset-delete-error { display: flex; align-items: flex-start; gap: 8px; margin: 13px 0 0; color: var(--coral, #e7465b); font-size: 13px; line-height: 1.5; }
+.dataset-delete-error svg { flex: none; margin-top: 1px; }
+.dataset-delete-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px; }
+.dataset-delete-actions > button { min-height: 40px; padding: 0 16px; border-radius: 8px; font-size: 14px; font-weight: 650; }
+.dataset-delete-cancel { justify-content: center; }
+.dataset-delete-confirm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #6f5bbd;
+  background: #6f5bbd;
+  color: #fff;
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+.dataset-delete-confirm:hover:not(:disabled) { transform: translateY(-1px); background: #7b68ca; border-color: #7b68ca; box-shadow: 0 5px 15px rgb(105 72 245 / 24%); }
+.dataset-delete-confirm:active:not(:disabled) { transform: scale(.98); }
+.dataset-delete-confirm:disabled { cursor: wait; opacity: .78; }
+.dataset-delete-spinner { width: 14px; height: 14px; border: 2px solid rgb(255 255 255 / 48%); border-top-color: #fff; border-radius: 50%; animation: dataset-delete-spin .7s linear infinite; }
+:root[data-theme="dark"] .dataset-delete-dialog { box-shadow: 0 24px 72px rgb(0 0 0 / 45%); }
+:root[data-theme="dark"] .dataset-delete-icon { border-color: #55458c; background: #302a55; color: #c6baff; }
+:root[data-theme="dark"] .dataset-delete-name { border-color: var(--border-color); background: var(--surface-soft); }
+:root[data-theme="dark"] .dataset-delete-confirm { border-color: #6f5bbd; background: #6f5bbd; color: #fff; }
+:root[data-theme="dark"] .dataset-delete-confirm:hover:not(:disabled) { background: #7b68ca; border-color: #7b68ca; }
+@keyframes dataset-delete-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dataset-delete-dialog-in { from { opacity: 0; transform: translateY(7px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes dataset-delete-spin { to { transform: rotate(360deg); } }
+@media (max-width: 480px) {
+  .dataset-delete-dialog { padding: 25px 21px 21px; border-radius: 14px; }
+  .dataset-delete-actions { flex-direction: column-reverse; }
+  .dataset-delete-actions > button { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dataset-delete-backdrop, .dataset-delete-dialog, .dataset-delete-spinner { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+  .dataset-delete-confirm { transition: none; }
+}

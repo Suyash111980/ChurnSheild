@@ -9,13 +9,14 @@ import ErrorState from "../components/common/ErrorState";
 import EmptyState from "../components/common/EmptyState";
 import { datasetScopeParams } from "../utils/datasetScope";
 import { contributionBar, contributionDirection, featureLabel, formatContribution, formatObservedValue, rankContributions } from "../utils/rootCausePresentation.js";
-import { usePageTransitionReady } from "../context/NavigationTransitionContext";
+import { useBeginDataTransition, usePageTransitionReady } from "../context/NavigationTransitionContext";
 
 function displayRisk(value) { const text = String(value || "Unavailable"); return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase(); }
 function formatSavedAt(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? "Unavailable" : date.toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }); }
 
 export default function RootCause() {
   const { datasets, datasetId: activeDatasetId, loading: datasetsLoading } = useDataset();
+  const beginDataTransition = useBeginDataTransition();
   const [params, setParams] = useSearchParams();
   const scope = params.get("scope") === "all" ? "all" : params.get("dataset_id") || activeDatasetId || "";
   const search = params.get("q") || "";
@@ -24,6 +25,7 @@ export default function RootCause() {
   const [selected, setSelected] = useState(null);
   const [profileRequest, setProfileRequest] = useState({ learnerId: null, datasetId: null, profile: null, loading: false, error: null });
   const [reload, setReload] = useState(0);
+  const [pendingScope, setPendingScope] = useState(null);
 
   useEffect(() => setDraftSearch(search), [search]);
   useEffect(() => {
@@ -57,7 +59,7 @@ export default function RootCause() {
   const profile = profileCurrent ? profileRequest.profile : null;
   const profileLoading = Boolean(selected) && (!profileCurrent || profileRequest.loading);
   const selectedDatasetId = selected?.dataset_id || (scope === "all" ? null : scope);
-  usePageTransitionReady(!datasetsLoading && !listLoading && (!selected || !selectedDatasetId || (profileCurrent && !profileRequest.loading)));
+  usePageTransitionReady(!datasetsLoading && !listLoading && (!selected || !selectedDatasetId || (profileCurrent && !profileRequest.loading)) && (pendingScope === null || pendingScope === scope));
   const profileError = profileCurrent ? profileRequest.error : null;
   const explanations = Array.isArray(profile?.risk_explanations) ? profile.risk_explanations : [];
   const rankedExplanations = useMemo(() => rankContributions(explanations), [explanations]);
@@ -66,7 +68,12 @@ export default function RootCause() {
   const learner = profile?.learner;
   const prediction = profile?.latest_prediction;
   const features = profile?.latest_feature_snapshot?.features;
-  const setScope = (value) => setParams((current) => { const next = new URLSearchParams(current); next.delete("offset"); if (value === "all") { next.set("scope", "all"); next.delete("dataset_id"); } else { next.delete("scope"); if (value) next.set("dataset_id", value); else next.delete("dataset_id"); } return next; });
+  const setScope = (value) => {
+    if (value === scope) return;
+    setPendingScope(value);
+    beginDataTransition();
+    setParams((current) => { const next = new URLSearchParams(current); next.delete("offset"); if (value === "all") { next.set("scope", "all"); next.delete("dataset_id"); } else { next.delete("scope"); if (value) next.set("dataset_id", value); else next.delete("dataset_id"); } return next; });
+  };
   const applySearch = (event) => { event.preventDefault(); setParams((current) => { const next = new URLSearchParams(current); if (draftSearch.trim()) next.set("q", draftSearch.trim()); else next.delete("q"); return next; }); };
 
   return <><PageHeader eyebrow="EXPLAINABLE ANALYSIS" title="Root Cause Analysis" subtitle="Review persisted prediction details, measured feature values, and saved model contributions. Contributions describe model output and do not establish causation." />
