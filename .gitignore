@@ -73,3 +73,6 @@ Thumbs.db
 !ml/artifacts/churn_model.joblib
 !ml/artifacts/churn_model.metadata.json
 !ml/artifacts/churn_model.evaluation.json
+# This source folder happens to share its name with the ignored data directory.
+!frontend/src/components/datasets/
+!frontend/src/components/datasets/**
