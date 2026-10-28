@@ -1,4 +1,4 @@
-const MASTER_ADMIN_PATHS = new Set(["/admin/users"]);
+const MASTER_ADMIN_PATHS = new Set(["/master-admin", "/master-admin/oulad", "/admin/users"]);
 
 export function roleRedirect(appRole, pathname) {
   if (appRole === "master_admin") {

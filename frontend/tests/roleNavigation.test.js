@@ -2,9 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { datasetListState, roleRedirect } from "../src/utils/roleNavigation.js";
 
-test("Master Admin is routed only to the Admin Requests interface", () => {
-  assert.equal(roleRedirect("master_admin", "/admin/users"), null);
-  for (const path of ["/", "/dashboard", "/learners", "/settings", "/master-admin", "/master-admin/oulad"]) {
+test("Master Admin can access platform overview and Admin Requests", () => {
+  for (const path of ["/admin/users", "/master-admin", "/master-admin/oulad"]) {
+    assert.equal(roleRedirect("master_admin", path), null);
+  }
+  for (const path of ["/", "/dashboard", "/learners", "/settings"]) {
     assert.equal(roleRedirect("master_admin", path), "/admin/users");
   }
 });

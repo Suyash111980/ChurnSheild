@@ -7,7 +7,7 @@ import { logoutAndRedirect } from "../../utils/logoutAndRedirect.js";
 import LogoutConfirmDialog from "./LogoutConfirmDialog";
 import { useTheme } from "../../context/ThemeContext";
 
-const titles = { "/dashboard": "Dashboard", "/learners": "Learner Analytics", "/analytics": "Analytics", "/early-warning": "Early Warning Center", "/root-cause": "Root Cause Analysis", "/recommendations": "Recommendations", "/course-insights": "Course Insights", "/reports": "Reports", "/settings": "Settings", "/master-admin": "Platform Overview", "/admin/users": "Admin requests" };
+const titles = { "/dashboard": "Dashboard", "/learners": "Learner Analytics", "/analytics": "Analytics", "/early-warning": "Early Warning Center", "/root-cause": "Root Cause Analysis", "/recommendations": "Recommendations", "/course-insights": "Course Insights", "/reports": "Reports", "/settings": "Settings", "/master-admin": "Super Admin Dashboard", "/admin/users": "Super Admin Dashboard" };
 
 export default function Topbar({ onMenu }) {
   const { pathname } = useLocation();
@@ -42,7 +42,7 @@ export default function Topbar({ onMenu }) {
   return <>
     <header className="topbar">
       <button className="icon-button mobile-menu" aria-label="Open menu" onClick={onMenu}><Menu size={20} /></button>
-      <div className="crumb"><strong>{title}</strong></div>
+      <div className={`crumb${pathname === "/admin/users" ? " crumb-super-admin" : ""}`}><strong>{title}</strong></div>
       <div className="top-actions">
         <button type="button" className="topbar-theme-button" onClick={toggleTheme} aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"} title={isDark ? "Switch to light mode" : "Switch to dark mode"} aria-pressed={isDark}>
           {isDark ? <Moon size={17} aria-hidden="true" /> : <Sun size={17} aria-hidden="true" />}
