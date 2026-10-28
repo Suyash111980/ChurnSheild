@@ -383,3 +383,65 @@
 @media (prefers-reduced-motion: reduce) {
   .admin-request-toolbar input,.admin-request-toolbar select,.admin-clear-filters { transition: none; }
 }
+
+/* Admin request details: clearer hierarchy and better-separated record sections. */
+.admin-request-dialog { width: min(620px, calc(100vw - 32px)); border-radius: 16px; }
+.admin-request-dialog[open] { animation: admin-dialog-enter 180ms ease-out both; }
+.admin-request-dialog form { padding: 26px; }
+.admin-dialog-heading { align-items: center; margin-bottom: 20px; }
+.admin-dialog-heading .form-eyebrow { margin-bottom: 8px; font-size: 10px; }
+.admin-dialog-heading h2 { font-size: 24px; line-height: 1.25; letter-spacing: -.45px; }
+.admin-dialog-heading .icon-button { width: 36px; height: 36px; border: 1px solid var(--border-color); color: var(--text-secondary); background: var(--surface); transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease; }
+.admin-dialog-heading .icon-button:hover { color: #6948f5; background: var(--surface-soft); border-color: #c9bcff; }
+.admin-dialog-user { gap: 6px; margin: 0 0 18px; padding: 15px 16px; border-radius: 10px; background: var(--surface-soft); border-color: var(--border-color); }
+.admin-dialog-user strong { color: var(--text-primary); font-size: 15px; }
+.admin-dialog-user span { color: var(--text-secondary); font-size: 13px; }
+.admin-dialog-facts { gap: 12px; }
+.admin-dialog-facts > div:not(.admin-dialog-record-group) { padding: 12px 13px; border: 1px solid var(--border-color); border-radius: 9px; background: var(--surface); }
+.admin-dialog-facts dt { color: var(--text-secondary); font-size: 11px; font-weight: 600; }
+.admin-dialog-facts dd { margin-top: 7px; color: var(--text-primary); font-size: 13px; line-height: 1.5; }
+.admin-dialog-record-group { padding: 14px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--surface-soft); }
+.admin-dialog-record-group dt { margin-bottom: 9px; color: var(--text-primary); font-size: 13px; font-weight: 700; }
+.admin-dialog-record-group dd { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
+.admin-dialog-record-group ul { gap: 0; }
+.admin-dialog-record-group li { padding: 9px 0; border-top: 1px solid var(--border-color); }
+.admin-dialog-record-group li:first-child { padding-top: 0; border-top: 0; }
+.admin-dialog-record-group li:last-child { padding-bottom: 0; }
+.admin-dialog-record-group li strong { color: var(--text-primary); font-size: 13px; }
+.admin-dialog-record-group li span { color: var(--text-secondary); font-size: 12px; }
+.admin-dialog-explanation { margin: 16px 0; padding: 13px 14px; border: 1px solid #e8e1ff; border-radius: 9px; font-size: 13px; }
+.admin-rejection-reason { gap: 8px; color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.admin-rejection-reason textarea { min-height: 90px; padding: 10px 12px; font-size: 13px; }
+.admin-dialog-actions { gap: 10px; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--border-color); }
+.admin-dialog-actions > button { min-height: 40px; padding-inline: 14px; font-size: 13px; transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease, border-color 150ms ease; }
+.admin-dialog-actions > button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 11px rgb(32 40 65 / 10%); }
+.admin-dialog-actions > button:active:not(:disabled) { transform: translateY(0); }
+.admin-dialog-actions > button:focus-visible { outline: 3px solid #a89aff; outline-offset: 2px; }
+:root[data-theme="dark"] .admin-dialog-heading .icon-button:hover { color: #ded7ff; background: #202c42; border-color: #7968ce; }
+:root[data-theme="dark"] .admin-dialog-facts > div:not(.admin-dialog-record-group) { background: var(--surface); border-color: var(--border-color); }
+:root[data-theme="dark"] .admin-dialog-record-group { background: var(--surface-soft); border-color: var(--border-color); }
+:root[data-theme="dark"] .admin-dialog-record-group li { border-color: var(--border-color); }
+:root[data-theme="dark"] .admin-dialog-explanation { background: #211e3b; border-color: #4b3e80; color: #c6baff; }
+@keyframes admin-dialog-enter {
+  from { opacity: 0; transform: translateY(5px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (max-width: 520px) {
+  .admin-request-dialog form { padding: 20px; }
+  .admin-dialog-heading h2 { font-size: 21px; }
+  .admin-dialog-actions { margin-top: 17px; padding-top: 13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-request-dialog[open] { animation: none; }
+  .admin-dialog-actions > button,.admin-dialog-heading .icon-button { transition: none; }
+  .admin-dialog-actions > button:hover:not(:disabled),.admin-dialog-actions > button:active:not(:disabled) { transform: none; }
+}
+.topbar .crumb strong {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.25px;
+}
+@media (max-width: 520px) {
+  .topbar .crumb strong { font-size: 15px; }
+}

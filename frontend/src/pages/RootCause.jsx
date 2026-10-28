@@ -9,14 +9,14 @@ import ErrorState from "../components/common/ErrorState";
 import EmptyState from "../components/common/EmptyState";
 import { datasetScopeParams } from "../utils/datasetScope";
 import { contributionBar, contributionDirection, featureLabel, formatContribution, formatObservedValue, rankContributions } from "../utils/rootCausePresentation.js";
-import { useBeginDataTransition, usePageTransitionReady } from "../context/NavigationTransitionContext";
+import DatasetScopeSelect from "../components/common/DatasetScopeSelect";
+import { usePageTransitionReady } from "../context/NavigationTransitionContext";
 
 function displayRisk(value) { const text = String(value || "Unavailable"); return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase(); }
 function formatSavedAt(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? "Unavailable" : date.toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }); }
 
 export default function RootCause() {
   const { datasets, datasetId: activeDatasetId, loading: datasetsLoading } = useDataset();
-  const beginDataTransition = useBeginDataTransition();
   const [params, setParams] = useSearchParams();
   const scope = params.get("scope") === "all" ? "all" : params.get("dataset_id") || activeDatasetId || "";
   const search = params.get("q") || "";
@@ -59,7 +59,11 @@ export default function RootCause() {
   const profile = profileCurrent ? profileRequest.profile : null;
   const profileLoading = Boolean(selected) && (!profileCurrent || profileRequest.loading);
   const selectedDatasetId = selected?.dataset_id || (scope === "all" ? null : scope);
-  usePageTransitionReady(!datasetsLoading && !listLoading && (!selected || !selectedDatasetId || (profileCurrent && !profileRequest.loading)) && (pendingScope === null || pendingScope === scope));
+  const scopeDataReady = !datasetsLoading && !listLoading && (!selected || !selectedDatasetId || (profileCurrent && !profileRequest.loading));
+  usePageTransitionReady(scopeDataReady && (pendingScope === null || pendingScope === scope));
+  useEffect(() => {
+    if (scopeDataReady && pendingScope === scope) setPendingScope(null);
+  }, [scopeDataReady, pendingScope, scope]);
   const profileError = profileCurrent ? profileRequest.error : null;
   const explanations = Array.isArray(profile?.risk_explanations) ? profile.risk_explanations : [];
   const rankedExplanations = useMemo(() => rankContributions(explanations), [explanations]);
@@ -71,14 +75,13 @@ export default function RootCause() {
   const setScope = (value) => {
     if (value === scope) return;
     setPendingScope(value);
-    beginDataTransition();
     setParams((current) => { const next = new URLSearchParams(current); next.delete("offset"); if (value === "all") { next.set("scope", "all"); next.delete("dataset_id"); } else { next.delete("scope"); if (value) next.set("dataset_id", value); else next.delete("dataset_id"); } return next; });
   };
   const applySearch = (event) => { event.preventDefault(); setParams((current) => { const next = new URLSearchParams(current); if (draftSearch.trim()) next.set("q", draftSearch.trim()); else next.delete("q"); return next; }); };
 
-  return <><PageHeader eyebrow="EXPLAINABLE ANALYSIS" title="Root Cause Analysis" subtitle="Review persisted prediction details, measured feature values, and saved model contributions. Contributions describe model output and do not establish causation." />
+  return <><PageHeader eyebrow="EXPLAINABLE ANALYSIS" title="Root Cause Analysis" />
     <section className="panel analysis-controls">
-      <label>Dataset<select aria-label="Analysis dataset" value={scope} onChange={(event) => setScope(event.target.value)}><option value="all">All Datasets / Overall Class</option>{datasets.map((item) => <option key={item.id} value={item.id}>{item.dataset_name} · {item.status}</option>)}</select></label>
+      <DatasetScopeSelect className="analysis-dataset-scope" value={scope} datasets={datasets} onChange={(event) => setScope(event.target.value)} loading={pendingScope !== null && !(scopeDataReady && pendingScope === scope)} label="Dataset" ariaLabel="Analysis dataset" />
       <form onSubmit={applySearch}><label htmlFor="root-cause-search">Search learner</label><input id="root-cause-search" type="search" value={draftSearch} onChange={(event) => setDraftSearch(event.target.value)} placeholder="Learner ID or course"/><button className="secondary-button" type="submit">Search</button></form>
       {!listLoading && !error && learners.length > 0 && <label>Learner record<select aria-label="Select learner record" value={selected?.id || ""} onChange={(event) => setSelected(learners.find((row) => row.id === event.target.value) || null)}>{learners.map((row) => <option key={row.id} value={row.id}>{row.latest_risk_category === "high" ? "High risk · " : ""}{row.student_name || `Learner ${row.id_student}`} · {row.code_module} · {row.code_presentation}{row.latest_risk_probability == null ? " · no prediction" : ` · ${(Number(row.latest_risk_probability) * 100).toFixed(1)}%`}</option>)}</select></label>}
     </section>
@@ -94,7 +97,7 @@ export default function RootCause() {
           {features && typeof features === "object" && <details className="profile-all-explanations"><summary>View persisted feature snapshot</summary><dl>{Object.entries(features).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value == null ? "Missing" : JSON.stringify(value)}</dd></div>)}</dl></details>}
         </article>
       </section>
-      <section className="panel insight-panel"><h2>Saved recommendations</h2>{profile.recommendations?.length ? <ul>{profile.recommendations.map((item) => <li key={item.id}><strong>{item.action || "Recommendation"}</strong> · {item.status || "Status unavailable"} — {item.reason || "No persisted rationale"}</li>)}</ul> : <p>No persisted recommendations are associated with this learner and dataset.</p>}<div className="insight-callout"><Sparkles size={16}/>Model contributions describe associations used by the saved model and do not establish causes.</div></section>
+      <section className="panel insight-panel"><h2>Saved recommendations</h2>{profile.recommendations?.length ? <ul>{profile.recommendations.map((item) => <li key={item.id}><strong>{item.action || "Recommendation"}</strong> · {item.status || "Status unavailable"} — {item.reason || "No persisted rationale"}</li>)}</ul> : <p>No persisted recommendations are associated with this learner and dataset.</p>}</section>
     </>}
   </>;
 }
