@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import AnimatedAuthLogo from "../components/common/AnimatedAuthLogo";
+import AuthBrandStory from "../components/common/AuthBrandStory";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -71,35 +72,7 @@ export default function Login() {
           </span>
         </div>
 
-        <div className="brand-story">
-          <span className="story-kicker">
-            <i /> LEARNER SUCCESS, IN FOCUS
-          </span>
-          <h1>
-            Spot the signal.
-            <br />
-            <em>Keep learners</em>
-            <br />
-            moving forward.
-          </h1>
-          <p>
-            Understand engagement, identify risk early, and turn insight into
-            meaningful action.
-          </p>
-          <div className="story-proof">
-            <div className="proof-avatars">
-              <b>J</b>
-              <b>M</b>
-              <b>A</b>
-              <b>+</b>
-            </div>
-            <span>
-              Designed for teams who care
-              <br />
-              about every learner journey
-            </span>
-          </div>
-        </div>
+        <AuthBrandStory />
 
         <div className="brand-bottom">
           © 2026 ChurnShield <span>•</span> Retention intelligence
