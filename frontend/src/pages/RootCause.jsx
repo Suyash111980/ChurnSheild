@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Sparkles } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { ArrowRight, Sparkles } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
 import PageHeader from "../components/layout/PageHeader";
 import { useDataset } from "../context/DatasetContext";
 import { getLearner, getLearners } from "../services/learnerService";
@@ -60,6 +60,11 @@ export default function RootCause() {
   const profile = profileCurrent ? profileRequest.profile : null;
   const profileLoading = Boolean(selected) && (!profileCurrent || profileRequest.loading);
   const selectedDatasetId = selected?.dataset_id || (scope === "all" ? null : scope);
+  const recommendationParams = new URLSearchParams();
+  if (selected?.id) recommendationParams.set("learner_id", selected.id);
+  if (selectedDatasetId) recommendationParams.set("dataset_id", selectedDatasetId);
+  else if (scope === "all") recommendationParams.set("scope", "all");
+  const recommendationsPath = `/recommendations?${recommendationParams.toString()}`;
   const scopeDataReady = !datasetsLoading && !listLoading && (!selected || !selectedDatasetId || (profileCurrent && !profileRequest.loading));
   usePageTransitionReady(scopeDataReady && (pendingScope === null || pendingScope === scope));
   useEffect(() => {
@@ -81,7 +86,7 @@ export default function RootCause() {
   };
   const applySearch = (event) => { event.preventDefault(); setParams((current) => { const next = new URLSearchParams(current); if (draftSearch.trim()) next.set("q", draftSearch.trim()); else next.delete("q"); return next; }); };
 
-  return <><PageHeader eyebrow="EXPLAINABLE ANALYSIS" title="Root Cause Analysis" />
+  return <><PageHeader eyebrow="EXPLAINABLE ANALYSIS" title="Root Cause Analysis" /><div className="page-heading-actions"><Link className="primary-button" to={recommendationsPath}>View recommendations <ArrowRight size={15}/></Link></div>
     <section className="panel analysis-controls">
       <DatasetScopeSelect className="analysis-dataset-scope" value={scope} datasets={datasets} onChange={(event) => setScope(event.target.value)} loading={pendingScope !== null && !(scopeDataReady && pendingScope === scope)} label="Dataset" ariaLabel="Analysis dataset" />
       <form onSubmit={applySearch}><label htmlFor="root-cause-search">Search learner</label><input id="root-cause-search" type="search" value={draftSearch} onChange={(event) => setDraftSearch(event.target.value)} placeholder="Learner ID or course"/><button className="secondary-button" type="submit">Search</button></form>
