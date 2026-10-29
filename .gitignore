@@ -76,3 +76,6 @@ Thumbs.db
 # This source folder happens to share its name with the ignored data directory.
 !frontend/src/components/datasets/
 !frontend/src/components/datasets/**
+
+# Temporary build review files
+frontend/.build-review-profile/

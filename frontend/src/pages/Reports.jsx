@@ -84,6 +84,5 @@ export default function Reports() {
       <ReportCard Icon={FileSpreadsheet} title="Risk Analysis" description={`${counts?.predictionCount?.toLocaleString() || 0} learners have saved prediction results.`} available={canExport && !loading && !availabilityError && hasPredictions} loading={loading} availabilityError={Boolean(availabilityError)} action={() => exportReport("risk", downloadRiskAnalysisCsv)} error={exportErrors.risk} busy={busy === "risk"}/>
       <ReportCard Icon={Lightbulb} title="Retention Recommendations" description={`${counts?.recommendationCount?.toLocaleString() || 0} persisted recommendations are associated with this dataset.`} available={canExport && !loading && !availabilityError && hasRecommendations} loading={loading} availabilityError={Boolean(availabilityError)} action={() => exportReport("recommendations", downloadRecommendationsCsv)} error={exportErrors.recommendations} busy={busy === "recommendations"}/>
     </section>
-    <p className="data-footnote"><span>ⓘ</span> Exports contain persisted values only. Missing predictions and recommendations are not filled in or inferred.</p>
   </>;
 }
