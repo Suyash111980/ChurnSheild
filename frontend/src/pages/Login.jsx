@@ -207,9 +207,6 @@ export default function Login() {
             New to ChurnShield? <Link to="/signup">Create an account</Link>
           </p>
 
-          <div className="auth-legal">
-            Secure authentication powered by Supabase.
-          </div>
         </div>
 
         <div className="auth-footer">

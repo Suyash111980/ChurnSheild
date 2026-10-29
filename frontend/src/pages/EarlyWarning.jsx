@@ -138,7 +138,7 @@ export default function EarlyWarning() {
 
   return <><PageHeader eyebrow="INTERVENTION WORKSPACE" title="Early Warning Center" subtitle="Prioritize outreach using persisted risk results and reviewable evidence."/>
     <DatasetScopeSelect value={overallScope ? "all" : datasetId} datasets={datasets} onChange={(event) => selectScope(event.target.value)} loading={pendingScope !== null && !(scopeDataReady && pendingScope === datasetId)} ariaLabel="Early Warning dataset scope" />
-    <div className="page-heading-actions"><button className="secondary-button" disabled={!rows.length} onClick={exportRows}><Download size={15}/> Export visible rows</button><Link className="primary-button" to="/recommendations">View recommendations <ArrowRight size={15}/></Link></div>
+    <div className="page-heading-actions"><button className="secondary-button" disabled={!rows.length} onClick={exportRows}><Download size={15}/> Export visible rows</button></div>
     {!datasetId && <EmptyState title="Select a dataset" message="Choose a processed dataset to review saved risk records and available evidence."/>}
     {loading && <LoadingState rows={4} label="Loading early warning records"/>}
     {error && <ErrorState title="Early warning data unavailable" message={`${warningErrorMessage(error)} No learners are labeled high risk when prediction data is missing.`} onRetry={() => setReload((value) => value + 1)}/>}
